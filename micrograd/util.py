@@ -1,12 +1,15 @@
 from graphviz import Digraph
 
+
 def to_dot(node):
     graph = Digraph(graph_attr={"rankdir": "LR"})
 
     def on_node(node):
         node_id = str(id(node))
         graph.node(
-            name=node_id, label=f"{node.label} | {node.data:.4f}", shape="record"
+            name=node_id,
+            label=f"{node.label} | data={node.data:.4f} | grad={node.grad:.4f}",
+            shape="record",
         )
         if node._op:
             node_op_id = f"{node_id}_{node._op}"

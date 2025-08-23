@@ -4,30 +4,55 @@ import math
 class Value:
     def __init__(self, data, label="", _children=(), _op=None):
         self.data = data
+        self.grad = 0.0
         self.label = label
         self._children = _children
         self._op = _op
+        self._backward = lambda: None
 
     def __repr__(self):
-        return f"{self.label}: {self.data}"
+        return f"Value(data={self.data}, label='{self.label}', grad={self.grad})"
 
     # Arithmetic operations
     def __add__(self, other):
         other = other if isinstance(other, Value) else Value(other)
-        return Value(self.data + other.data, "", (self, other), "+")
+        out = Value(self.data + other.data, "", (self, other), "+")
+
+        def _backward():
+            self.grad = out.grad
+            other.grad = out.grad
+
+        out._backward = _backward
+
+        return out
 
     def __radd__(self, other):
         return Value(other) + self
 
     def __mul__(self, other):
         other = other if isinstance(other, Value) else Value(other)
-        return Value(self.data * other.data, "", (self, other), "*")
+        out = Value(self.data * other.data, "", (self, other), "*")
+
+        def _backward():
+            self.grad = out.grad * other.data
+            other.grad = out.grad * self.data
+
+        out._backward = _backward
+
+        return out
 
     def __rmul__(self, other):
         return Value(other) * self
 
     def __pow__(self, other):
-        return Value(self.data**other, "", (self,), f"**{other}")
+        out = Value(self.data**other, "", (self,), f"**{other}")
+
+        def _backward():
+            self.grad = out.grad * other * (self.data ** (other - 1))
+
+        out._backward = _backward
+
+        return out
 
     def __neg__(self):
         return self * -1
@@ -40,27 +65,77 @@ class Value:
 
     def __truediv__(self, other):
         other = other if isinstance(other, Value) else Value(other)
-        return Value(self.data / other.data, "", (self, other), "/")
+        out = Value(self.data / other.data, "", (self, other), "/")
+
+        def _backward():
+            self.grad = out.grad / other.data
+            other.grad = out.grad * (-self.data / (other.data**2))
+
+        out._backward = _backward
+
+        return out
 
     def __rtruediv__(self, other):
         return Value(other) / self
 
     # Activation functions
     def tanh(self):
-        return Value(math.tanh(self.data), "", (self,), "tanh")
+        out = Value(math.tanh(self.data), "", (self,), "tanh")
+
+        def _backward():
+            self.grad = out.grad * (1 - out.data**2)
+
+        out._backward = _backward
+
+        return out
 
     def relu(self):
-        return Value(max(0, self.data), "", (self,), "relu")
+        out = Value(max(0, self.data), "", (self,), "relu")
+
+        def _backward():
+            self.grad = out.grad * (1 if self.data > 0 else 0)
+
+        out._backward = _backward
+
+        return out
 
     def sigmoid(self):
-        return Value(1 / (1 + math.exp(-self.data)), "", (self,), "sigmoid")
+        out = Value(1 / (1 + math.exp(-self.data)), "", (self,), "sigmoid")
+
+        def _backward():
+            self.grad = out.grad * out.data * (1 - out.data)
+
+        out._backward = _backward
+
+        return out
 
     # Mathematical functions
     def exp(self):
-        return Value(math.exp(self.data), "", (self,), "exp")
+        out = Value(math.exp(self.data), "", (self,), "exp")
+
+        def _backward():
+            self.grad = out.grad * out.data
+
+        out._backward = _backward
+
+        return out
 
     def log(self):
-        return Value(math.log(self.data), "", (self,), "log")
+        out = Value(math.log(self.data), "", (self,), "log")
+
+        def _backward():
+            self.grad = out.grad / self.data
+
+        out._backward = _backward
+
+        return out
 
     def abs(self):
-        return Value(abs(self.data), "", (self,), "abs")
+        out = Value(abs(self.data), "", (self,), "abs")
+
+        def _backward():
+            self.grad = out.grad * (1 if self.data >= 0 else -1)
+
+        out._backward = _backward
+
+        return out
