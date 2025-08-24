@@ -13,6 +13,23 @@ class Value:
     def __repr__(self):
         return f"Value(data={self.data}, label='{self.label}', grad={self.grad})"
 
+    def backward(self):
+        visited = set()
+        seq = []
+
+        def iter(n):
+            if n not in visited:
+                visited.add(n)
+                for c in n._children:
+                    iter(c)
+                seq.append(n)
+
+        iter(self)
+
+        self.grad = 1.0
+        for n in reversed(seq):
+            n._backward()
+
     # Arithmetic operations
     def __add__(self, other):
         other = other if isinstance(other, Value) else Value(other)

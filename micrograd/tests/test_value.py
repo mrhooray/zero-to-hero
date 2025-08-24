@@ -166,3 +166,55 @@ class TestValue:
         assert d.data == 3.0
         assert d._op == "abs"
         assert d._children == (c,)
+
+    # Backward pass tests
+    def test_backward_comprehensive(self):
+        a = Value(2.0, label="a")
+        b = Value(-3.0, label="b")
+        c = Value(0.5, label="c")
+
+        # Arithmetic operations
+        d = a * b
+        e = d + c
+        f = e - a
+        g = f / 2
+        h = g**2
+        i = -h
+
+        # Activation functions
+        j = i.tanh()
+        k = a.relu()
+        m = b.relu()
+        n = c.sigmoid()
+
+        # Mathematical functions
+        o = a.exp()
+        p = a.log()
+        q = b.abs()
+
+        final = j + k * m + n - o / p + q
+
+        # Verify forward pass result
+        expected_j = math.tanh(-14.0625)
+        expected_k = 2.0
+        expected_m = 0.0
+        expected_n = 1 / (1 + math.exp(-0.5))
+        expected_o = math.exp(2.0)
+        expected_p = math.log(2.0)
+        expected_q = 3.0
+        expected_final = (
+            expected_j
+            + expected_k * expected_m
+            + expected_n
+            - expected_o / expected_p
+            + expected_q
+        )
+        assert abs(final.data - expected_final) < 1e-10
+
+        final.backward()
+
+        # Verify backward pass results (reference values from PyTorch)
+        assert final.grad == 1.0
+        assert abs(a.grad - (-2.9704785346984863)) < 1e-6
+        assert abs(b.grad - (-1.0)) < 1e-6
+        assert abs(c.grad - 0.23500370979309082) < 1e-6
