@@ -36,8 +36,8 @@ class Value:
         out = Value(self.data + other.data, "", (self, other), "+")
 
         def _backward():
-            self.grad = out.grad
-            other.grad = out.grad
+            self.grad += out.grad
+            other.grad += out.grad
 
         out._backward = _backward
 
@@ -51,8 +51,8 @@ class Value:
         out = Value(self.data * other.data, "", (self, other), "*")
 
         def _backward():
-            self.grad = out.grad * other.data
-            other.grad = out.grad * self.data
+            self.grad += out.grad * other.data
+            other.grad += out.grad * self.data
 
         out._backward = _backward
 
@@ -65,7 +65,7 @@ class Value:
         out = Value(self.data**other, "", (self,), f"**{other}")
 
         def _backward():
-            self.grad = out.grad * other * (self.data ** (other - 1))
+            self.grad += out.grad * other * (self.data ** (other - 1))
 
         out._backward = _backward
 
@@ -85,8 +85,8 @@ class Value:
         out = Value(self.data / other.data, "", (self, other), "/")
 
         def _backward():
-            self.grad = out.grad / other.data
-            other.grad = out.grad * (-self.data / (other.data**2))
+            self.grad += out.grad / other.data
+            other.grad += out.grad * (-self.data / (other.data**2))
 
         out._backward = _backward
 
@@ -100,7 +100,7 @@ class Value:
         out = Value(math.tanh(self.data), "", (self,), "tanh")
 
         def _backward():
-            self.grad = out.grad * (1 - out.data**2)
+            self.grad += out.grad * (1 - out.data**2)
 
         out._backward = _backward
 
@@ -110,7 +110,7 @@ class Value:
         out = Value(max(0, self.data), "", (self,), "relu")
 
         def _backward():
-            self.grad = out.grad * (1 if self.data > 0 else 0)
+            self.grad += out.grad * (1 if self.data > 0 else 0)
 
         out._backward = _backward
 
@@ -120,7 +120,7 @@ class Value:
         out = Value(1 / (1 + math.exp(-self.data)), "", (self,), "sigmoid")
 
         def _backward():
-            self.grad = out.grad * out.data * (1 - out.data)
+            self.grad += out.grad * out.data * (1 - out.data)
 
         out._backward = _backward
 
@@ -131,7 +131,7 @@ class Value:
         out = Value(math.exp(self.data), "", (self,), "exp")
 
         def _backward():
-            self.grad = out.grad * out.data
+            self.grad += out.grad * out.data
 
         out._backward = _backward
 
@@ -141,7 +141,7 @@ class Value:
         out = Value(math.log(self.data), "", (self,), "log")
 
         def _backward():
-            self.grad = out.grad / self.data
+            self.grad += out.grad / self.data
 
         out._backward = _backward
 
@@ -151,7 +151,7 @@ class Value:
         out = Value(abs(self.data), "", (self,), "abs")
 
         def _backward():
-            self.grad = out.grad * (1 if self.data >= 0 else -1)
+            self.grad += out.grad * (1 if self.data >= 0 else -1)
 
         out._backward = _backward
 

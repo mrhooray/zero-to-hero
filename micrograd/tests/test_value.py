@@ -218,3 +218,15 @@ class TestValue:
         assert abs(a.grad - (-2.9704785346984863)) < 1e-6
         assert abs(b.grad - (-1.0)) < 1e-6
         assert abs(c.grad - 0.23500370979309082) < 1e-6
+
+    def test_backward_gradient_accumulation(self):
+        a = Value(2.0, label="a")
+
+        b = a * a
+        c = b + a
+        assert c.data == 6.0
+        c.backward()
+
+        assert a.grad == 5.0
+        assert b.grad == 1.0
+        assert c.grad == 1.0
