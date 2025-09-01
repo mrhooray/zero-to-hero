@@ -14,6 +14,7 @@ print(max(len(x) for x in names))
 
 chars = sorted(set("".join(names) + "."))
 stoi = {ch: i for i, ch in enumerate(chars)}
+itos = {i: ch for i, ch in enumerate(chars)}
 bigram_counts = torch.zeros((len(chars), len(chars)), dtype=torch.int32)
 for name in names:
     chs = ["."] + list(name) + ["."]
@@ -28,3 +29,19 @@ print(bigram_counts[:8, :8])
 print(f"Bigram probs shape: {bigram_probs.shape}")
 print("Bigram probs[:8, :8]:")
 print(bigram_probs[:8, :8])
+
+generated = []
+for _ in range(32):
+    name = []
+    ix = stoi["."]
+    while True:
+        p = bigram_probs[ix]
+        ix = int(torch.multinomial(p, num_samples=1).item())
+        if ix == stoi["."]:
+            break
+        name.append(itos[ix])
+    generated.append("".join(name))
+
+print("Generated names:")
+for name in generated:
+    print(name)
