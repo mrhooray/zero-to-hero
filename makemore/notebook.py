@@ -45,3 +45,14 @@ for _ in range(32):
 print("Generated names:")
 for name in generated:
     print(name)
+
+nll = 0.0
+count = 0
+for name in names:
+    chs = ["."] + list(name) + ["."]
+    for a, b in zip(chs, chs[1:]):
+        prob = bigram_probs[stoi[a], stoi[b]]
+        nll -= prob.log().item()
+        count += 1
+avg_nll = nll / count
+print(f"Average negative log-likelihood: {avg_nll:.4f}")
