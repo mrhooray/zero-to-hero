@@ -46,13 +46,25 @@ print("Generated names:")
 for name in generated:
     print(name)
 
-nll = 0.0
-count = 0
-for name in names:
-    chs = ["."] + list(name) + ["."]
-    for a, b in zip(chs, chs[1:]):
-        prob = bigram_probs[stoi[a], stoi[b]]
-        nll -= prob.log().item()
-        count += 1
-avg_nll = nll / count
+
+def calculate_avg_nll(names, bigram_probs, stoi):
+    nll = 0.0
+    count = 0
+    for name in names:
+        chs = ["."] + list(name) + ["."]
+        for a, b in zip(chs, chs[1:]):
+            prob = bigram_probs[stoi[a], stoi[b]]
+            nll -= prob.log().item()
+            count += 1
+    return nll / count
+
+
+avg_nll = calculate_avg_nll(names, bigram_probs, stoi)
 print(f"Average negative log-likelihood: {avg_nll:.4f}")
+
+bigram_counts_smooth = bigram_counts + 1
+bigram_probs_smooth = bigram_counts_smooth.float() / (
+    bigram_counts_smooth.sum(dim=1, keepdim=True) + len(chars)
+)
+avg_nll_smooth = calculate_avg_nll(names, bigram_probs_smooth, stoi)
+print(f"Average negative log-likelihood (smoothed): {avg_nll_smooth:.4f}")
