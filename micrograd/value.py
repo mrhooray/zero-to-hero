@@ -1,4 +1,5 @@
 import math
+from collections import deque
 
 
 class Value:
@@ -16,15 +17,17 @@ class Value:
     def backward(self):
         visited = set()
         seq = []
+        stack = deque([self])
 
-        def iter(n):
-            if n not in visited:
+        while stack:
+            n = stack[-1]
+            if all(c in visited for c in n._children):
+                seq.append(stack.pop())
                 visited.add(n)
+            else:
                 for c in n._children:
-                    iter(c)
-                seq.append(n)
-
-        iter(self)
+                    if c not in visited:
+                        stack.append(c)
 
         self.grad = 1.0
         for n in reversed(seq):
