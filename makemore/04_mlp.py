@@ -32,6 +32,10 @@ print(f"EMB shape {EMB.shape}")
 
 X_onehot = F.one_hot(X, num_classes=27).float()
 print(f"X_onehot shape {X_onehot.shape}")
+print("X_onehot @ EMB equals to EMB[X]?", torch.allclose(X_onehot @ EMB, EMB[X]))
 
-emb_onehot = X_onehot @ EMB
-print("X_onehot @ EMB equals to EMB[X]?", torch.allclose(emb_onehot, EMB[X]))
+W1 = torch.randn((6, 100))
+B1 = torch.randn((100))
+
+emb = X_onehot @ EMB
+print((emb.view(-1, 6) @ W1 + B1).shape)
