@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.nn.functional as F
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 names_path = os.path.join(script_dir, "names.txt")
@@ -23,6 +24,14 @@ for name in names:
 
 X = torch.tensor([[stoi[ch] for ch in prev] for prev, _ in data])
 Y = torch.tensor([stoi[next] for _, next in data])
+EMB = torch.randn((27, 2))
 
-print("X shape:", X.shape)
-print("Y shape:", Y.shape)
+print(f"X shape {X.shape}")
+print(f"Y shape {Y.shape}")
+print(f"EMB shape {EMB.shape}")
+
+X_onehot = F.one_hot(X, num_classes=27).float()
+print(f"X_onehot shape {X_onehot.shape}")
+
+emb_onehot = X_onehot @ EMB
+print("X_onehot @ EMB equals to EMB[X]?", torch.allclose(emb_onehot, EMB[X]))
