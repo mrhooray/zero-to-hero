@@ -38,4 +38,17 @@ W1 = torch.randn((6, 100))
 B1 = torch.randn((100))
 
 emb = X_onehot @ EMB
-print((emb.view(-1, 6) @ W1 + B1).shape)
+h = emb.view(-1, 6) @ W1 + B1
+print(f"h shape {h.shape}")
+
+W2 = torch.randn((100, 27))
+B2 = torch.randn((27))
+logits = h @ W2 + B2
+print(f"logits shape {logits.shape}")
+
+cnts = logits.exp()
+probs = cnts / cnts.sum(1, keepdim=True)
+print(f"probs shape {probs.shape}")
+
+probs_label = probs[torch.arange(X.shape[0]), Y]
+print(f"probs_label shape {probs_label.shape}")
