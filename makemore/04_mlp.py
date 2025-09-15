@@ -81,13 +81,15 @@ for p in params:
     p.requires_grad = True
     p.data = torch.randn(p.shape, generator=g)
 
+batch_size = 128
 n_epochs = 128
 learning_rate = 0.16
 for _ in range(n_epochs):
-    emb = EMB[X_tr]
+    batch = torch.randint(0, len(X_tr), (batch_size,), generator=g)
+    emb = EMB[X_tr[batch]]
     h = torch.tanh(emb.view(-1, 6) @ W1 + B1)
     logits = h @ W2 + B2
-    loss = F.cross_entropy(logits, Y_tr)
+    loss = F.cross_entropy(logits, Y_tr[batch])
     print(f"loss {loss.item()}")
     for p in params:
         p.grad = None
