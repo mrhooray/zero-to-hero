@@ -13,14 +13,14 @@ stoi = {ch: i for i, ch in enumerate(chars)}
 itos = {i: ch for i, ch in enumerate(chars)}
 vocab_size = len(chars)
 
-block_size = 3
+block_size = 4
 emb_dim = 16
-hidden_dim = 100
-batch_size = 32
-n_epochs = 1024 * 16
+hidden_dim = 256
+batch_size = 256
+n_epochs = 1024 * 128
 learning_rate = 0.16
-decay_points = [0.8]
-decay_factors = [2]
+decay_points = [0.68, 0.84, 0.92]
+decay_factors = [4, 4, 4]
 
 data = []
 for name in names:
