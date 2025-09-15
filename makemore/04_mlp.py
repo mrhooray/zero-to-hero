@@ -28,22 +28,25 @@ print(f"X shape {X.shape}")
 print(f"Y shape {Y.shape}")
 
 g = torch.Generator().manual_seed(24)
-EMB = torch.randn((27, 2), generator=g)
+emb_dim = 16
+EMB = torch.randn((vocab_size, emb_dim), generator=g)
 print(f"EMB shape {EMB.shape}")
 
-X_onehot = F.one_hot(X, num_classes=27).float()
+X_onehot = F.one_hot(X, num_classes=vocab_size).float()
 print(f"X_onehot shape {X_onehot.shape}")
 print("X_onehot @ EMB equals to EMB[X]?", torch.allclose(X_onehot @ EMB, EMB[X]))
 
-W1 = torch.randn((6, 100), generator=g)
-B1 = torch.randn((100), generator=g)
+hidden_dim = 100
+input_dim = block_size * emb_dim
+W1 = torch.randn((input_dim, hidden_dim), generator=g)
+B1 = torch.randn((hidden_dim), generator=g)
 
 emb = X_onehot @ EMB
-h = torch.tanh(emb.view(-1, 6) @ W1 + B1)
+h = torch.tanh(emb.view(-1, input_dim) @ W1 + B1)
 print(f"h shape {h.shape}")
 
-W2 = torch.randn((100, 27), generator=g)
-B2 = torch.randn((27), generator=g)
+W2 = torch.randn((hidden_dim, vocab_size), generator=g)
+B2 = torch.randn((vocab_size), generator=g)
 logits = h @ W2 + B2
 print(f"logits shape {logits.shape}")
 
@@ -82,12 +85,12 @@ for p in params:
     p.data = torch.randn(p.shape, generator=g)
 
 batch_size = 128
-n_epochs = 128
+n_epochs = 128 * 16
 learning_rate = 0.16
 for _ in range(n_epochs):
     batch = torch.randint(0, len(X_tr), (batch_size,), generator=g)
     emb = EMB[X_tr[batch]]
-    h = torch.tanh(emb.view(-1, 6) @ W1 + B1)
+    h = torch.tanh(emb.view(-1, input_dim) @ W1 + B1)
     logits = h @ W2 + B2
     loss = F.cross_entropy(logits, Y_tr[batch])
     print(f"loss {loss.item()}")
@@ -103,7 +106,7 @@ for _ in range(n_epochs):
 # for hyperparameter tuning
 with torch.no_grad():
     emb_val = EMB[X_val]
-    h_val = torch.tanh(emb_val.view(-1, 6) @ W1 + B1)
+    h_val = torch.tanh(emb_val.view(-1, input_dim) @ W1 + B1)
     logits_val = h_val @ W2 + B2
     loss_val = F.cross_entropy(logits_val, Y_val)
     print(f"validation loss {loss_val.item()}")
@@ -111,7 +114,7 @@ with torch.no_grad():
 # for model performance
 # with torch.no_grad():
 #     emb_te = EMB[X_te]
-#     h_te = torch.tanh(emb_te.view(-1, 6) @ W1 + B1)
+#     h_te = torch.tanh(emb_te.view(-1, input_dim) @ W1 + B1)
 #     logits_te = h_te @ W2 + B2
 #     loss_te = F.cross_entropy(logits_te, Y_te)
 #     print(f"test loss {loss_te.item()}")
