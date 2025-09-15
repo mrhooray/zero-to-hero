@@ -14,6 +14,14 @@ itos = {i: ch for i, ch in enumerate(chars)}
 vocab_size = len(chars)
 
 block_size = 3
+emb_dim = 16
+hidden_dim = 100
+batch_size = 32
+n_epochs = 1024 * 16
+learning_rate = 0.16
+decay_points = [0.8]
+decay_factors = [2]
+
 data = []
 for name in names:
     chs = ["."] * block_size + list(name) + ["."]
@@ -28,7 +36,6 @@ print(f"X shape {X.shape}")
 print(f"Y shape {Y.shape}")
 
 g = torch.Generator().manual_seed(24)
-emb_dim = 16
 EMB = torch.randn((vocab_size, emb_dim), generator=g)
 print(f"EMB shape {EMB.shape}")
 
@@ -36,7 +43,6 @@ X_onehot = F.one_hot(X, num_classes=vocab_size).float()
 print(f"X_onehot shape {X_onehot.shape}")
 print("X_onehot @ EMB equals to EMB[X]?", torch.allclose(X_onehot @ EMB, EMB[X]))
 
-hidden_dim = 100
 input_dim = block_size * emb_dim
 W1 = torch.randn((input_dim, hidden_dim), generator=g)
 B1 = torch.randn((hidden_dim), generator=g)
@@ -84,24 +90,27 @@ for p in params:
     p.requires_grad = True
     p.data = torch.randn(p.shape, generator=g)
 
-batch_size = 128
-n_epochs = 128 * 16
-learning_rate = 0.16
-for _ in range(n_epochs):
+for epoch in range(n_epochs):
+    current_decay = 1
+    for point, factor in zip(decay_points, decay_factors):
+        if epoch >= int(point * n_epochs):
+            current_decay = factor
+    lr = learning_rate / current_decay
+
     batch = torch.randint(0, len(X_tr), (batch_size,), generator=g)
     emb = EMB[X_tr[batch]]
     h = torch.tanh(emb.view(-1, input_dim) @ W1 + B1)
     logits = h @ W2 + B2
     loss = F.cross_entropy(logits, Y_tr[batch])
-    print(f"loss {loss.item()}")
+    print(f"epoch {epoch}, loss {loss.item()}")
+
     for p in params:
         p.grad = None
-
     loss.backward()
 
     for p in params:
         if p.grad is not None:
-            p.data += -learning_rate * p.grad
+            p.data += -lr * p.grad
 
 # for hyperparameter tuning
 with torch.no_grad():
