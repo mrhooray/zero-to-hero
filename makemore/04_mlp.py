@@ -22,6 +22,8 @@ n_epochs = 1024 * 128
 learning_rate = 0.16
 decay_points = [0.68, 0.84, 0.92]
 decay_factors = [4, 4, 4]
+bn_momentum = 0.1
+bn_eps = 1e-5
 
 data = []
 for name in names:
@@ -49,9 +51,17 @@ input_dim = block_size * emb_dim
 W1 = torch.empty((input_dim, hidden_dim))
 init.kaiming_normal_(W1, mode="fan_in", nonlinearity="tanh", generator=g)
 B1 = torch.zeros((hidden_dim))
+BN_GAIN = torch.ones((1, hidden_dim))
+BN_BIAS = torch.zeros((1, hidden_dim))
+BN_RUNNING_MEAN = torch.zeros((1, hidden_dim))
+BN_RUNNING_VAR = torch.ones((1, hidden_dim))
 
 emb = X_onehot @ EMB
-h = torch.tanh(emb.view(-1, input_dim) @ W1 + B1)
+linear = emb.view(-1, input_dim) @ W1 + B1
+norm = (linear - linear.mean(dim=0, keepdim=True)) / torch.sqrt(
+    linear.var(dim=0, keepdim=True, unbiased=False) + bn_eps
+)
+h = torch.tanh(BN_GAIN * norm + BN_BIAS)
 print(f"h shape {h.shape}")
 
 W2 = torch.empty((hidden_dim, vocab_size))
@@ -67,7 +77,7 @@ print(f"probs shape {probs.shape}")
 probs_label = probs[torch.arange(X.shape[0]), Y]
 print(f"probs_label shape {probs_label.shape}")
 
-params = [EMB, W1, B1, W2, B2]
+params = [EMB, W1, B1, BN_GAIN, BN_BIAS, W2, B2]
 params_count = sum(p.nelement() for p in params)
 print(f"params_count {params_count}")
 
@@ -102,7 +112,14 @@ for epoch in range(n_epochs):
 
     batch = torch.randint(0, len(X_tr), (batch_size,), generator=g)
     emb = EMB[X_tr[batch]]
-    h = torch.tanh(emb.view(-1, input_dim) @ W1 + B1)
+    linear = emb.view(-1, input_dim) @ W1 + B1
+    batch_mean = linear.mean(dim=0, keepdim=True)
+    batch_var = linear.var(dim=0, keepdim=True, unbiased=False)
+    norm = (linear - batch_mean) / torch.sqrt(batch_var + bn_eps)
+    h = torch.tanh(BN_GAIN * norm + BN_BIAS)
+    with torch.no_grad():
+        BN_RUNNING_MEAN.mul_(1 - bn_momentum).add_(bn_momentum * batch_mean.detach())
+        BN_RUNNING_VAR.mul_(1 - bn_momentum).add_(bn_momentum * batch_var.detach())
     logits = h @ W2 + B2
     loss = F.cross_entropy(logits, Y_tr[batch])
     print(f"epoch {epoch}, loss {loss.item()}")
@@ -118,7 +135,9 @@ for epoch in range(n_epochs):
 # for hyperparameter tuning
 with torch.no_grad():
     emb_val = EMB[X_val]
-    h_val = torch.tanh(emb_val.view(-1, input_dim) @ W1 + B1)
+    linear_val = emb_val.view(-1, input_dim) @ W1 + B1
+    norm_val = (linear_val - BN_RUNNING_MEAN) / torch.sqrt(BN_RUNNING_VAR + bn_eps)
+    h_val = torch.tanh(BN_GAIN * norm_val + BN_BIAS)
     logits_val = h_val @ W2 + B2
     loss_val = F.cross_entropy(logits_val, Y_val)
     print(f"validation loss {loss_val.item()}")
@@ -126,7 +145,9 @@ with torch.no_grad():
 # for model performance
 # with torch.no_grad():
 #     emb_te = EMB[X_te]
-#     h_te = torch.tanh(emb_te.view(-1, input_dim) @ W1 + B1)
+#     linear_te = emb_te.view(-1, input_dim) @ W1 + B1
+#     norm_te = (linear_te - BN_RUNNING_MEAN) / torch.sqrt(BN_RUNNING_VAR + bn_eps)
+#     h_te = torch.tanh(BN_GAIN * norm_te + BN_BIAS)
 #     logits_te = h_te @ W2 + B2
 #     loss_te = F.cross_entropy(logits_te, Y_te)
 #     print(f"test loss {loss_te.item()}")
