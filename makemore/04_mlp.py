@@ -1,6 +1,8 @@
+import math
 import os
 import torch
 import torch.nn.functional as F
+import torch.nn.init as init
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 names_path = os.path.join(script_dir, "names.txt")
@@ -44,15 +46,22 @@ print(f"X_onehot shape {X_onehot.shape}")
 print("X_onehot @ EMB equals to EMB[X]?", torch.allclose(X_onehot @ EMB, EMB[X]))
 
 input_dim = block_size * emb_dim
-W1 = torch.randn((input_dim, hidden_dim), generator=g)
-B1 = torch.randn((hidden_dim), generator=g)
+gain_tanh = init.calculate_gain("tanh")
+gain_linear = init.calculate_gain("linear")
+
+W1 = torch.randn((input_dim, hidden_dim), generator=g) * (
+    gain_tanh / math.sqrt(input_dim)
+)
+B1 = torch.zeros((hidden_dim))
 
 emb = X_onehot @ EMB
 h = torch.tanh(emb.view(-1, input_dim) @ W1 + B1)
 print(f"h shape {h.shape}")
 
-W2 = torch.randn((hidden_dim, vocab_size), generator=g)
-B2 = torch.randn((vocab_size), generator=g)
+W2 = torch.randn((hidden_dim, vocab_size), generator=g) * (
+    gain_linear / math.sqrt(hidden_dim)
+)
+B2 = torch.zeros((vocab_size))
 logits = h @ W2 + B2
 print(f"logits shape {logits.shape}")
 
@@ -88,7 +97,6 @@ Y_te = torch.tensor([stoi[next] for _, next in data_te])
 
 for p in params:
     p.requires_grad = True
-    p.data = torch.randn(p.shape, generator=g)
 
 for epoch in range(n_epochs):
     current_decay = 1
