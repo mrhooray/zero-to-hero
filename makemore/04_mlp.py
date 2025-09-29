@@ -1,4 +1,3 @@
-import math
 import os
 import torch
 import torch.nn.functional as F
@@ -46,21 +45,17 @@ print(f"X_onehot shape {X_onehot.shape}")
 print("X_onehot @ EMB equals to EMB[X]?", torch.allclose(X_onehot @ EMB, EMB[X]))
 
 input_dim = block_size * emb_dim
-gain_tanh = init.calculate_gain("tanh")
-gain_linear = init.calculate_gain("linear")
 
-W1 = torch.randn((input_dim, hidden_dim), generator=g) * (
-    gain_tanh / math.sqrt(input_dim)
-)
+W1 = torch.empty((input_dim, hidden_dim))
+init.kaiming_normal_(W1, mode="fan_in", nonlinearity="tanh", generator=g)
 B1 = torch.zeros((hidden_dim))
 
 emb = X_onehot @ EMB
 h = torch.tanh(emb.view(-1, input_dim) @ W1 + B1)
 print(f"h shape {h.shape}")
 
-W2 = torch.randn((hidden_dim, vocab_size), generator=g) * (
-    gain_linear / math.sqrt(hidden_dim)
-)
+W2 = torch.empty((hidden_dim, vocab_size))
+init.kaiming_normal_(W2, mode="fan_in", nonlinearity="linear", generator=g)
 B2 = torch.zeros((vocab_size))
 logits = h @ W2 + B2
 print(f"logits shape {logits.shape}")
