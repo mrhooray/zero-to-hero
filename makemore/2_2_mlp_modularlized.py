@@ -61,7 +61,7 @@ class Linear(Module):
         ] = "linear",
     ):
         super().__init__()
-        weight = torch.empty((in_features, out_features))
+        weight = torch.empty((out_features, in_features))
         weight.requires_grad = True
         init.kaiming_normal_(
             weight, mode="fan_in", nonlinearity=nonlinearity, generator=generator
@@ -73,7 +73,7 @@ class Linear(Module):
         self.bias = bias
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x @ self.weight + self.bias
+        return x @ self.weight.T + self.bias
 
 
 class Embedding(Module):
