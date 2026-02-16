@@ -1,6 +1,7 @@
 import os
 import random
 import torch
+import torch.nn.functional as F
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 names_path = os.path.join(script_dir, "names.txt")
@@ -135,15 +136,29 @@ loss.backward()
 # -----------------
 # YOUR CODE HERE :)
 # -----------------
+# print(logprobs.shape, probs.shape)
+dlogprobs = F.one_hot(Yb, logprobs.shape[1])  # from indexing
+dlogprobs = -dlogprobs / n  # from mean, neg
+dprobs = probs**-1 * dlogprobs
+# print(probs.shape, counts_sum_inv.shape, counts_sum.shape, counts.shape)
+dcounts_sum_inv = (counts * dprobs).sum(1, keepdims=True)  # from broadcast
+dcounts_sum = -(counts_sum**-2) * dcounts_sum_inv
+dcounts = counts_sum_inv * dprobs
+dcounts += 1 * dcounts_sum
+# print(norm_logits.shape, logit_maxes.shape, logits.shape)
+dnorm_logits = counts * dcounts
+dlogit_maxes = -1 * dnorm_logits.sum(1, keepdims=True)  # from broadcast
+dlogits = 1 * dnorm_logits
+dlogits += F.one_hot(logits.max(1).indices, logits.shape[1]) * dlogit_maxes  # from max
 
-# cmp('logprobs', dlogprobs, logprobs)
-# cmp('probs', dprobs, probs)
-# cmp('counts_sum_inv', dcounts_sum_inv, counts_sum_inv)
-# cmp('counts_sum', dcounts_sum, counts_sum)
-# cmp('counts', dcounts, counts)
-# cmp('norm_logits', dnorm_logits, norm_logits)
-# cmp('logit_maxes', dlogit_maxes, logit_maxes)
-# cmp('logits', dlogits, logits)
+cmp("logprobs", dlogprobs, logprobs)
+cmp("probs", dprobs, probs)
+cmp("counts_sum_inv", dcounts_sum_inv, counts_sum_inv)
+cmp("counts_sum", dcounts_sum, counts_sum)
+cmp("counts", dcounts, counts)
+cmp("norm_logits", dnorm_logits, norm_logits)
+cmp("logit_maxes", dlogit_maxes, logit_maxes)
+cmp("logits", dlogits, logits)
 # cmp('h', dh, h)
 # cmp('W2', dW2, W2)
 # cmp('b2', db2, b2)
