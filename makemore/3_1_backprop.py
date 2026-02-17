@@ -168,7 +168,10 @@ db2 = dlogits.sum(0)
 cmp("h", dh, h)
 cmp("W2", dW2, W2)
 cmp("b2", db2, b2)
-# cmp('hpreact', dhpreact, hpreact)
+
+# print(h.shape, hpreact.shape)
+dhpreact = (1 - h**2) * dh
+cmp("hpreact", dhpreact, hpreact)
 # cmp('bngain', dbngain, bngain)
 # cmp('bnbias', dbnbias, bnbias)
 # cmp('bnraw', dbnraw, bnraw)
