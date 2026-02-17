@@ -159,9 +159,15 @@ cmp("counts", dcounts, counts)
 cmp("norm_logits", dnorm_logits, norm_logits)
 cmp("logit_maxes", dlogit_maxes, logit_maxes)
 cmp("logits", dlogits, logits)
-# cmp('h', dh, h)
-# cmp('W2', dW2, W2)
-# cmp('b2', db2, b2)
+
+# print(logits.shape, h.shape, W2.shape, b2.shape)
+dh = dlogits @ W2.T
+dW2 = h.T @ dlogits
+db2 = dlogits.sum(0)
+
+cmp("h", dh, h)
+cmp("W2", dW2, W2)
+cmp("b2", db2, b2)
 # cmp('hpreact', dhpreact, hpreact)
 # cmp('bngain', dbngain, bngain)
 # cmp('bnbias', dbnbias, bnbias)
