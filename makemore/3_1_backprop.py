@@ -172,15 +172,31 @@ cmp("b2", db2, b2)
 # print(h.shape, hpreact.shape)
 dhpreact = (1 - h**2) * dh
 cmp("hpreact", dhpreact, hpreact)
-# cmp('bngain', dbngain, bngain)
-# cmp('bnbias', dbnbias, bnbias)
-# cmp('bnraw', dbnraw, bnraw)
-# cmp('bnvar_inv', dbnvar_inv, bnvar_inv)
-# cmp('bnvar', dbnvar, bnvar)
-# cmp('bndiff2', dbndiff2, bndiff2)
-# cmp('bndiff', dbndiff, bndiff)
-# cmp('bnmeani', dbnmeani, bnmeani)
-# cmp('hprebn', dhprebn, hprebn)
+
+# print(hpreact.shape, bngain.shape, bnraw.shape, bnbias.shape)
+dbngain = (bnraw * dhpreact).sum(0, keepdim=True)
+dbnraw = bngain * dhpreact
+dbnbias = (1 * dhpreact).sum(0, keepdim=True)
+cmp("bngain", dbngain, bngain)
+cmp("bnraw", dbnraw, bnraw)
+cmp("bnbias", dbnbias, bnbias)
+# print(bnraw.shape, bndiff.shape, bnvar_inv.shape)
+dbnvar_inv = (bndiff * dbnraw).sum(0, keepdim=True)
+dbnvar = -0.5 * (bnvar + 1e-5) ** -1.5 * dbnvar_inv
+# print(bnvar.shape, bndiff2.shape)
+dbndiff2 = 1 / (n - 1) * torch.ones_like(bndiff2) * dbnvar
+dbndiff = bnvar_inv * dbnraw
+dbndiff += 2 * bndiff * dbndiff2
+# print(bndiff.shape, hprebn.shape, bnmeani.shape)
+dbnmeani = -dbndiff.sum(0, keepdim=True)
+dhprebn = dbndiff.clone()  # due to +=
+dhprebn += 1 / n * torch.ones_like(bnmeani) * dbnmeani
+cmp("bnvar_inv", dbnvar_inv, bnvar_inv)
+cmp("bnvar", dbnvar, bnvar)
+cmp("bndiff2", dbndiff2, bndiff2)
+cmp("bndiff", dbndiff, bndiff)
+cmp("bnmeani", dbnmeani, bnmeani)
+cmp("hprebn", dhprebn, hprebn)
 # cmp('embcat', dembcat, embcat)
 # cmp('W1', dW1, W1)
 # cmp('b1', db1, b1)
