@@ -205,5 +205,7 @@ db1 = dhprebn.sum(0)
 cmp("embcat", dembcat, embcat)
 cmp("W1", dW1, W1)
 cmp("b1", db1, b1)
-# cmp("emb", demb, emb)
+
+demb = dembcat.view(emb.shape)
+cmp("emb", demb, emb)
 # cmp('C', dC, C)
