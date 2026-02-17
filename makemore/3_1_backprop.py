@@ -225,4 +225,7 @@ loss_fast = F.cross_entropy(logits, Yb)
 # YOUR CODE HERE :)
 # -----------------
 
-# cmp("logits", dlogits, logits)
+dlogits = F.softmax(logits, 1)  # probability
+dlogits[range(n), Yb] -= 1
+dlogits /= n
+cmp("logits", dlogits, logits)
