@@ -197,8 +197,13 @@ cmp("bndiff2", dbndiff2, bndiff2)
 cmp("bndiff", dbndiff, bndiff)
 cmp("bnmeani", dbnmeani, bnmeani)
 cmp("hprebn", dhprebn, hprebn)
-# cmp('embcat', dembcat, embcat)
-# cmp('W1', dW1, W1)
-# cmp('b1', db1, b1)
-# cmp('emb', demb, emb)
+
+# print(hprebn.shape, embcat.shape, W1.shape, b1.shape)
+dembcat = dhprebn @ W1.T
+dW1 = embcat.T @ dhprebn
+db1 = dhprebn.sum(0)
+cmp("embcat", dembcat, embcat)
+cmp("W1", dW1, W1)
+cmp("b1", db1, b1)
+# cmp("emb", demb, emb)
 # cmp('C', dC, C)
