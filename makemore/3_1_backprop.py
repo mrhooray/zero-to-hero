@@ -208,4 +208,11 @@ cmp("b1", db1, b1)
 
 demb = dembcat.view(emb.shape)
 cmp("emb", demb, emb)
-# cmp('C', dC, C)
+
+# print(emb.shape, C.shape, Xb.shape)
+dC = torch.zeros_like(C)
+# for i in range(Xb.shape[0]):
+#     for j in range(Xb.shape[1]):
+#         dC[Xb[i, j]] += demb[i, j]
+dC.index_add_(0, Xb.view(-1), demb.view(-1, demb.shape[-1]))
+cmp("C", dC, C)
