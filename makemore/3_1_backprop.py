@@ -216,3 +216,13 @@ dC = torch.zeros_like(C)
 #         dC[Xb[i, j]] += demb[i, j]
 dC.index_add_(0, Xb.view(-1), demb.view(-1, demb.shape[-1]))
 cmp("C", dC, C)
+
+# Exercise 2: backprop through cross_entropy in one go
+
+loss_fast = F.cross_entropy(logits, Yb)
+
+# -----------------
+# YOUR CODE HERE :)
+# -----------------
+
+# cmp("logits", dlogits, logits)
