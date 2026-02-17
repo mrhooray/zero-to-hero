@@ -161,20 +161,17 @@ class MLP(Module):
         block_size: int,
         emb_dim: int,
         hidden_dim: int,
-        n_hidden_layers: int = 4,
+        hidden_layers: int,
         generator: Optional[torch.Generator] = None,
-        bn_momentum: float = 0.1,
-        bn_eps: float = 1e-5,
     ):
-        if n_hidden_layers < 1:
-            raise ValueError(f"n_hidden_layers must be >= 1, got {n_hidden_layers}")
+        if hidden_layers < 1:
+            raise ValueError(f"hidden_layers must be >= 1, got {hidden_layers}")
 
         super().__init__()
         self.vocab_size = vocab_size
         self.block_size = block_size
         self.emb_dim = emb_dim
         self.hidden_dim = hidden_dim
-        self.n_hidden_layers = n_hidden_layers
 
         input_dim = block_size * emb_dim
 
@@ -182,7 +179,7 @@ class MLP(Module):
         self.flatten = Flatten()
 
         layers = []
-        for i in range(n_hidden_layers):
+        for i in range(hidden_layers):
             layers.append(
                 Linear(
                     input_dim if i == 0 else hidden_dim,
@@ -191,7 +188,7 @@ class MLP(Module):
                     nonlinearity="tanh",
                 )
             )
-            layers.append(BatchNorm1d(hidden_dim, momentum=bn_momentum, eps=bn_eps))
+            layers.append(BatchNorm1d(hidden_dim))
             layers.append(Tanh())
 
         self.hidden_layers = Sequential(*layers)
@@ -267,13 +264,12 @@ def main():
     block_size = 4
     emb_dim = 16
     hidden_dim = 256
+    hidden_layers = 4
     batch_size = 256
-    n_epochs = 1024 * 128
+    epochs = 1024 * 128
     learning_rate = 0.16
     decay_points = [0.68, 0.84, 0.92]
     decay_factors = [4, 4, 4]
-    bn_momentum = 0.1
-    bn_eps = 1e-5
     seed = 24
 
     # Load data
@@ -287,6 +283,11 @@ def main():
 
     print(f"Dataset size: {len(data)}")
     print(f"Vocab size: {vocab_size}")
+    print(f"block_size = {block_size}")
+    print(f"emb_dim = {emb_dim}")
+    print(f"hidden_dim = {hidden_dim}")
+    print(f"hidden_layers = {hidden_layers}")
+    print(f"batch_size = {batch_size}")
 
     # Split data
     g = torch.Generator().manual_seed(seed)
@@ -316,9 +317,8 @@ def main():
         block_size,
         emb_dim,
         hidden_dim,
+        hidden_layers,
         generator=g_model,
-        bn_momentum=bn_momentum,
-        bn_eps=bn_eps,
     )
 
     # Count parameters and buffers
@@ -328,10 +328,10 @@ def main():
     print(f"Total buffers: {n_buffers}")
 
     # Training loop
-    for epoch in range(n_epochs):
+    for epoch in range(epochs):
         current_decay = 1
         for point, factor in zip(decay_points, decay_factors):
-            if epoch >= int(point * n_epochs):
+            if epoch >= int(point * epochs):
                 current_decay = factor
         lr = learning_rate / current_decay
 
@@ -341,7 +341,7 @@ def main():
 
         loss = train_step(model, X_batch, Y_batch, lr)
 
-        if epoch % 10000 == 0:
+        if epoch % 1024 == 0:
             print(f"epoch {epoch}, loss {loss:.4f}, lr {lr:.6f}")
 
     # Validation

@@ -18,7 +18,7 @@ block_size = 4
 emb_dim = 16
 hidden_dim = 256
 batch_size = 256
-n_epochs = 1024 * 128
+epochs = 1024 * 128
 learning_rate = 0.16
 decay_points = [0.68, 0.84, 0.92]
 decay_factors = [4, 4, 4]
@@ -37,6 +37,10 @@ X = torch.tensor([[stoi[ch] for ch in prev] for prev, _ in data])
 Y = torch.tensor([stoi[next] for _, next in data])
 print(f"X shape {X.shape}")
 print(f"Y shape {Y.shape}")
+print(f"block_size = {block_size}")
+print(f"emb_dim = {emb_dim}")
+print(f"hidden_dim = {hidden_dim}")
+print(f"batch_size = {batch_size}")
 
 g = torch.Generator().manual_seed(24)
 EMB = torch.randn((vocab_size, emb_dim), generator=g)
@@ -103,10 +107,10 @@ Y_te = torch.tensor([stoi[next] for _, next in data_te])
 for p in params:
     p.requires_grad = True
 
-for epoch in range(n_epochs):
+for epoch in range(epochs):
     current_decay = 1
     for point, factor in zip(decay_points, decay_factors):
-        if epoch >= int(point * n_epochs):
+        if epoch >= int(point * epochs):
             current_decay = factor
     lr = learning_rate / current_decay
 
