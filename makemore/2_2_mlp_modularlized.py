@@ -154,62 +154,6 @@ class Sequential(Module):
         return x
 
 
-class MLP(Module):
-    def __init__(
-        self,
-        vocab_size: int,
-        block_size: int,
-        emb_dim: int,
-        hidden_dim: int,
-        hidden_layers: int,
-        generator: Optional[torch.Generator] = None,
-    ):
-        if hidden_layers < 1:
-            raise ValueError(f"hidden_layers must be >= 1, got {hidden_layers}")
-
-        super().__init__()
-        self.vocab_size = vocab_size
-        self.block_size = block_size
-        self.emb_dim = emb_dim
-        self.hidden_dim = hidden_dim
-
-        input_dim = block_size * emb_dim
-
-        self.embedding = Embedding(vocab_size, emb_dim, generator=generator)
-        self.flatten = Flatten()
-
-        layers = []
-        for i in range(hidden_layers):
-            layers.append(
-                Linear(
-                    input_dim if i == 0 else hidden_dim,
-                    hidden_dim,
-                    generator=generator,
-                    nonlinearity="tanh",
-                )
-            )
-            layers.append(BatchNorm1d(hidden_dim))
-            layers.append(Tanh())
-
-        self.hidden_layers = Sequential(*layers)
-        self.fc_out = Linear(
-            hidden_dim, vocab_size, generator=generator, nonlinearity="linear"
-        )
-
-    def forward(self, x: torch.Tensor, training: bool = True) -> torch.Tensor:
-        x = self.embedding(x)
-        x = self.flatten(x)
-        x = self.hidden_layers(x, training=training)
-        x = self.fc_out(x)
-        return x
-
-    def loss(
-        self, x: torch.Tensor, y: torch.Tensor, training: bool = True
-    ) -> torch.Tensor:
-        logits = self.forward(x, training=training)
-        return F.cross_entropy(logits, y)
-
-
 def load_data(
     names_path: str, block_size: int
 ) -> Tuple[List[Tuple[List[str], str]], List[str]]:
@@ -238,12 +182,16 @@ def prepare_tensors(
 
 
 def train_step(
-    model: MLP, X_batch: torch.Tensor, Y_batch: torch.Tensor, learning_rate: float
+    model: Module,
+    X_batch: torch.Tensor,
+    Y_batch: torch.Tensor,
+    learning_rate: float,
 ) -> float:
     for p in model.parameters():
         p.grad = None
 
-    loss = model.loss(X_batch, Y_batch, training=True)
+    logits = model(X_batch, training=True)
+    loss = F.cross_entropy(logits, Y_batch)
     loss.backward()
 
     for p in model.parameters():
@@ -253,9 +201,10 @@ def train_step(
     return loss.item()
 
 
-def evaluate(model: MLP, X: torch.Tensor, Y: torch.Tensor) -> float:
+def evaluate(model: Module, X: torch.Tensor, Y: torch.Tensor) -> float:
     with torch.no_grad():
-        loss = model.loss(X, Y, training=False)
+        logits = model(X, training=False)
+        loss = F.cross_entropy(logits, Y)
     return loss.item()
 
 
@@ -312,13 +261,25 @@ def main():
 
     # Create model
     g_model = torch.Generator().manual_seed(seed)
-    model = MLP(
-        vocab_size,
-        block_size,
-        emb_dim,
-        hidden_dim,
-        hidden_layers,
-        generator=g_model,
+    input_dim = block_size * emb_dim
+    layers = []
+    for i in range(hidden_layers):
+        layers.append(
+            Linear(
+                input_dim if i == 0 else hidden_dim,
+                hidden_dim,
+                generator=g_model,
+                nonlinearity="tanh",
+            )
+        )
+        layers.append(BatchNorm1d(hidden_dim))
+        layers.append(Tanh())
+
+    model = Sequential(
+        Embedding(vocab_size, emb_dim, generator=g_model),
+        Flatten(),
+        *layers,
+        Linear(hidden_dim, vocab_size, generator=g_model, nonlinearity="linear"),
     )
 
     # Count parameters and buffers
