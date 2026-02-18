@@ -1,4 +1,6 @@
+import math
 import os
+
 import torch
 import torch.nn.functional as F
 import torch.nn.init as init
@@ -92,9 +94,19 @@ class Embedding(Module):
         return self.weight[indices]
 
 
-class Flatten(Module):
+class FlattenBy(Module):
+    def __init__(
+        self,
+        seq: int,
+    ):
+        super().__init__()
+        self.seq = seq
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x.view(x.shape[0], -1)
+        b, s, d = x.shape
+        if s // self.seq == 1:
+            return x.view(b, d * self.seq)
+        return x.view(b, s // self.seq, d * self.seq)
 
 
 class BatchNorm1d(Module):
@@ -210,10 +222,10 @@ def evaluate(model: Module, X: torch.Tensor, Y: torch.Tensor) -> float:
 
 def main():
     # Configuration
-    block_size = 3
+    block_size = 8
     emb_dim = 10
+    dilation = 2
     hidden_dim = 68
-    hidden_layers = 1
     batch_size = 128
     epochs = 1024 * 128
     learning_rate = 0.1
@@ -234,8 +246,8 @@ def main():
     print(f"Vocab size: {vocab_size}")
     print(f"block_size = {block_size}")
     print(f"emb_dim = {emb_dim}")
+    print(f"dilation = {dilation}")
     print(f"hidden_dim = {hidden_dim}")
-    print(f"hidden_layers = {hidden_layers}")
     print(f"batch_size = {batch_size}")
 
     # Split data
@@ -261,23 +273,22 @@ def main():
 
     # Create model
     g_model = torch.Generator().manual_seed(seed)
-    input_dim = block_size * emb_dim
     layers = []
-    for i in range(hidden_layers):
+    for i in range(int(math.log(block_size) / math.log(dilation))):
+        layers.append(FlattenBy(dilation))
         layers.append(
             Linear(
-                input_dim if i == 0 else hidden_dim,
+                (emb_dim if i == 0 else hidden_dim) * dilation,
                 hidden_dim,
                 generator=g_model,
                 nonlinearity="tanh",
-            )
+            ),
         )
         layers.append(BatchNorm1d(hidden_dim))
         layers.append(Tanh())
 
     model = Sequential(
         Embedding(vocab_size, emb_dim, generator=g_model),
-        Flatten(),
         *layers,
         Linear(hidden_dim, vocab_size, generator=g_model, nonlinearity="linear"),
     )
