@@ -110,34 +110,38 @@ class FlattenBy(Module):
 
 
 class BatchNorm1d(Module):
-    def __init__(self, num_features: int, momentum: float = 0.1, eps: float = 1e-5):
+    def __init__(self, dim: int, momentum: float = 0.1, eps: float = 1e-5):
         super().__init__()
-        self.num_features = num_features
         self.momentum = momentum
         self.eps = eps
 
-        weight = torch.ones((1, num_features))
+        weight = torch.ones(dim)
         weight.requires_grad = True
         self.weight = weight
 
-        bias = torch.zeros((1, num_features))
+        bias = torch.zeros(dim)
         bias.requires_grad = True
         self.bias = bias
 
-        self.running_mean = torch.zeros((1, num_features))
-        self.running_var = torch.ones((1, num_features))
+        self.running_mean = torch.zeros(dim)
+        self.running_var = torch.ones(dim)
 
     def forward(self, x: torch.Tensor, training: bool = True) -> torch.Tensor:
+        dim = tuple(range(x.ndim - 1))
         if training:
-            batch_mean = x.mean(dim=0, keepdim=True)
-            batch_var = x.var(dim=0, keepdim=True, unbiased=False)
+            batch_mean = x.mean(dim, keepdim=True)
+            batch_var = x.var(dim, keepdim=True, unbiased=False)
 
             # Update running statistics
             with torch.no_grad():
-                self.running_mean.mul_(1 - self.momentum).add_(
-                    self.momentum * batch_mean
+                self.running_mean = (
+                    self.running_mean * (1 - self.momentum)
+                    + self.momentum * batch_mean.squeeze()
                 )
-                self.running_var.mul_(1 - self.momentum).add_(self.momentum * batch_var)
+                self.running_var = (
+                    self.running_var * (1 - self.momentum)
+                    + self.momentum * batch_var.squeeze()
+                )
 
             x_norm = (x - batch_mean) / torch.sqrt(batch_var + self.eps)
         else:
