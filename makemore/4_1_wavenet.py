@@ -227,9 +227,9 @@ def evaluate(model: Module, X: torch.Tensor, Y: torch.Tensor) -> float:
 def main():
     # Configuration
     block_size = 8
-    emb_dim = 10
+    emb_dim = 16
     dilation = 2
-    hidden_dim = 68
+    hidden_dim = 128
     batch_size = 128
     epochs = 1024 * 128
     learning_rate = 0.1
