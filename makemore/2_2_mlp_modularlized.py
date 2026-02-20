@@ -215,7 +215,7 @@ def main():
     hidden_dim = 256
     hidden_layers = 4
     batch_size = 256
-    epochs = 1024 * 128
+    steps = 1024 * 128
     learning_rate = 0.16
     decay_points = [0.68, 0.84, 0.92]
     decay_factors = [4, 4, 4]
@@ -289,10 +289,10 @@ def main():
     print(f"Total buffers: {n_buffers}")
 
     # Training loop
-    for epoch in range(epochs):
+    for step in range(steps):
         current_decay = 1
         for point, factor in zip(decay_points, decay_factors):
-            if epoch >= int(point * epochs):
+            if step >= int(point * steps):
                 current_decay = factor
         lr = learning_rate / current_decay
 
@@ -302,8 +302,8 @@ def main():
 
         loss = train_step(model, X_batch, Y_batch, lr)
 
-        if epoch % 1024 == 0:
-            print(f"epoch {epoch}, loss {loss:.4f}, lr {lr:.6f}")
+        if step % 1024 == 0:
+            print(f"step {step}, loss {loss:.4f}, lr {lr:.6f}")
 
     # Validation
     val_loss = evaluate(model, X_val, Y_val)

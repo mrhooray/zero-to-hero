@@ -46,10 +46,10 @@ def forward(i):
     return probs
 
 
-n_epochs = 10
+epochs = 10
 learning_rate = 0.1
 
-for epoch in range(n_epochs):
+for epoch in range(epochs):
     start_time = time.time()
     total_loss = Value(0)
     for xi, yi in zip(X, Y):

@@ -27,10 +27,10 @@ X = torch.tensor([stoi[a] for a, _ in bigrams])
 Y = torch.tensor([stoi[b] for _, b in bigrams])
 W = torch.randn(vocab_size, vocab_size, requires_grad=True)
 
-n_epochs = 256
+epochs = 256
 learning_rate = 64
 
-for epoch in range(n_epochs):
+for epoch in range(epochs):
     start_time = time.time()
     xenc = F.one_hot(X, num_classes=vocab_size).float()
     logits = xenc @ W

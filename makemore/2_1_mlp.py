@@ -18,7 +18,7 @@ block_size = 4
 emb_dim = 16
 hidden_dim = 256
 batch_size = 256
-epochs = 1024 * 128
+steps = 1024 * 128
 learning_rate = 0.16
 decay_points = [0.68, 0.84, 0.92]
 decay_factors = [4, 4, 4]
@@ -107,10 +107,10 @@ Y_te = torch.tensor([stoi[next] for _, next in data_te])
 for p in params:
     p.requires_grad = True
 
-for epoch in range(epochs):
+for step in range(steps):
     current_decay = 1
     for point, factor in zip(decay_points, decay_factors):
-        if epoch >= int(point * epochs):
+        if step >= int(point * steps):
             current_decay = factor
     lr = learning_rate / current_decay
 
@@ -126,7 +126,7 @@ for epoch in range(epochs):
         BN_RUNNING_VAR.mul_(1 - bn_momentum).add_(bn_momentum * batch_var.detach())
     logits = h @ W2 + B2
     loss = F.cross_entropy(logits, Y_tr[batch])
-    print(f"epoch {epoch}, loss {loss.item()}")
+    print(f"step {step}, loss {loss.item()}")
 
     for p in params:
         p.grad = None
