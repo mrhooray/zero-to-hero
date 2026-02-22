@@ -69,6 +69,21 @@ class FeedForward(nn.Module):
         return self.ff(X)
 
 
+class LayerNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-5):
+        super().__init__()
+        self.eps = eps
+
+        self.weight = nn.Parameter(torch.ones(dim))
+        self.bias = nn.Parameter(torch.zeros(dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch_mean = x.mean(-1, keepdim=True)
+        batch_var = x.var(-1, keepdim=True, unbiased=False)
+        x_norm = (x - batch_mean) / torch.sqrt(batch_var + self.eps)
+        return self.weight * x_norm + self.bias
+
+
 class Block(nn.Module):
     def __init__(self, block_size, emb_dim, head_size):
         super().__init__()
