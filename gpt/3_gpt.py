@@ -56,6 +56,19 @@ class MultiHeadAttention(nn.Module):
         return o
 
 
+class FeedForward(nn.Module):
+    def __init__(self, emb_dim, expansion=4):
+        super().__init__()
+        self.ff = nn.Sequential(
+            nn.Linear(emb_dim, emb_dim * expansion),
+            nn.ReLU(),
+            nn.Linear(emb_dim * expansion, emb_dim),
+        )
+
+    def forward(self, X):
+        return self.ff(X)
+
+
 class GPTLM(nn.Module):
     def __init__(self, vocab_size, block_size, emb_size):
         super().__init__()
