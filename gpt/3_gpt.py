@@ -1,4 +1,5 @@
 from os.path import abspath, dirname, join
+import time
 
 import torch
 import torch.nn as nn
@@ -222,6 +223,7 @@ def main():
         # model.train()
         return out
 
+    t0 = time.time()
     for step in range(steps):
         X, Y = get_batch("train")
         _, loss = model(X, Y)
@@ -230,8 +232,11 @@ def main():
         optimizer.step()
 
         if step % eval_interval == 0:
+            t1 = time.time()
             losses = estimate_loss()
-            print(f"step {step}:", f"losses: {losses}")
+            elapsed = t1 - t0
+            print(f"step {step}: losses: {losses} ({elapsed:.2f}s)")
+            t0 = time.time()
 
     context = torch.zeros((1, 1), dtype=torch.long, device=device)
     print(
