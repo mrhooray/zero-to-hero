@@ -112,7 +112,7 @@ class GPTLM(nn.Module):
     def forward(self, X, Y=None):
         B, T = X.shape
         emb_tok = self.tok_to_emb(X)  # B, T, C
-        emb_pos = self.pos_to_emb(torch.arange(T))  # T, C
+        emb_pos = self.pos_to_emb(torch.arange(T, device=X.device))  # T, C
         x = emb_tok + emb_pos
         x = self.blocks(x)
         x = self.ln(x)
@@ -150,8 +150,7 @@ def main():
     if torch.cuda.is_available():
         device = "cuda"
     elif torch.backends.mps.is_available():
-        # device = "mps"
-        device = "cpu"
+        device = "mps"
     else:
         device = "cpu"
 
