@@ -20,12 +20,14 @@ class Vocab:
 
 
 class GPTLM(nn.Module):
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size, emb_size):
         super().__init__()
-        self.probs = nn.Embedding(vocab_size, vocab_size)
+        self.token_to_emb = nn.Embedding(vocab_size, emb_size)
+        self.head = nn.Linear(emb_size, vocab_size)
 
     def forward(self, X, Y=None):
-        logits = self.probs(X)
+        emb = self.token_to_emb(X)
+        logits = self.head(emb)
 
         if Y is None:
             loss = None
@@ -48,6 +50,7 @@ class GPTLM(nn.Module):
 
 def main():
     block_size = 8
+    emb_dim = 32
     batch_size = 128
     steps = 1024 * 128
     eval_interval = 1024
@@ -91,7 +94,7 @@ def main():
         Y = data[ix.unsqueeze(1) + offsets + 1]
         return X, Y
 
-    model = GPTLM(vocab.size).to(device)
+    model = GPTLM(vocab.size, emb_dim).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr)
 
     @torch.inference_mode()
