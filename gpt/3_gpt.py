@@ -40,6 +40,22 @@ class Head(nn.Module):
         return o
 
 
+class MultiHeadAttention(nn.Module):
+    def __init__(self, block_size, emb_dim, head_size):
+        super().__init__()
+        assert emb_dim % head_size == 0, "emb_dim must be divisible by head_size"
+        num_heads = emb_dim // head_size
+        self.heads = nn.ModuleList(
+            [Head(block_size, emb_dim, head_size) for _ in range(num_heads)]
+        )
+        self.proj = nn.Linear(emb_dim, emb_dim)
+
+    def forward(self, X):
+        o = torch.cat([head(X) for head in self.heads], dim=-1)
+        o = self.proj(o)
+        return o
+
+
 class GPTLM(nn.Module):
     def __init__(self, vocab_size, block_size, emb_size):
         super().__init__()
