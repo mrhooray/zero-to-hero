@@ -20,11 +20,12 @@ class Vocab:
 
 
 class Head(nn.Module):
-    def __init__(self, block_size, emb_dim, head_size):
+    def __init__(self, block_size, emb_dim, head_size, dropout):
         super().__init__()
         self.key = nn.Linear(emb_dim, head_size, bias=False)
         self.query = nn.Linear(emb_dim, head_size, bias=False)
         self.value = nn.Linear(emb_dim, head_size, bias=False)
+        self.dropout = nn.Dropout(dropout)
         self.register_buffer("mask", torch.ones(block_size, block_size).tril())
 
     def forward(self, X):
@@ -36,33 +37,38 @@ class Head(nn.Module):
         w = w * head_size**-0.5  # scale by contracting dimension
         w = w.masked_fill(self.mask[:T, :T] == 0, -torch.inf)
         w = F.softmax(w, dim=-1)
+        w = self.dropout(w)
         o = w @ v  # B, T, head_size
         return o
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, block_size, emb_dim, head_size):
+    def __init__(self, block_size, emb_dim, head_size, dropout):
         super().__init__()
         assert emb_dim % head_size == 0, "emb_dim must be divisible by head_size"
         num_heads = emb_dim // head_size
         self.heads = nn.ModuleList(
-            [Head(block_size, emb_dim, head_size) for _ in range(num_heads)]
+            [Head(block_size, emb_dim, head_size, dropout) for _ in range(num_heads)]
         )
         self.proj = nn.Linear(emb_dim, emb_dim)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, X):
         o = torch.cat([head(X) for head in self.heads], dim=-1)
         o = self.proj(o)
+        o = self.dropout(o)
         return o
 
 
 class FeedForward(nn.Module):
-    def __init__(self, emb_dim, expansion=4):
+    def __init__(self, emb_dim, dropout, expansion=4):
         super().__init__()
         self.ff = nn.Sequential(
             nn.Linear(emb_dim, emb_dim * expansion),
             nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(emb_dim * expansion, emb_dim),
+            nn.Dropout(dropout),
         )
 
     def forward(self, X):
@@ -85,12 +91,12 @@ class LayerNorm(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, block_size, emb_dim, head_size):
+    def __init__(self, block_size, emb_dim, head_size, dropout):
         super().__init__()
         self.ln1 = LayerNorm(emb_dim)
-        self.attn = MultiHeadAttention(block_size, emb_dim, head_size)
+        self.attn = MultiHeadAttention(block_size, emb_dim, head_size, dropout)
         self.ln2 = LayerNorm(emb_dim)
-        self.ff = FeedForward(emb_dim)
+        self.ff = FeedForward(emb_dim, dropout)
 
     def forward(self, X):
         X = X + self.attn(self.ln1(X))  # pre-norm
@@ -99,12 +105,17 @@ class Block(nn.Module):
 
 
 class GPTLM(nn.Module):
-    def __init__(self, vocab_size, block_size, emb_size, num_blocks, head_size):
+    def __init__(
+        self, vocab_size, block_size, emb_size, num_blocks, head_size, dropout
+    ):
         super().__init__()
         self.tok_to_emb = nn.Embedding(vocab_size, emb_size)
         self.pos_to_emb = nn.Embedding(block_size, emb_size)
         self.blocks = nn.Sequential(
-            *[Block(block_size, emb_size, head_size) for _ in range(num_blocks)]
+            *[
+                Block(block_size, emb_size, head_size, dropout)
+                for _ in range(num_blocks)
+            ]
         )
         self.ln = LayerNorm(emb_size)
         self.head = nn.Linear(emb_size, vocab_size)
@@ -147,6 +158,7 @@ def main():
     eval_interval = 1024
     eval_size = 256
     lr = 1e-3
+    dropout = 0.2
     if torch.cuda.is_available():
         device = "cuda"
     elif torch.backends.mps.is_available():
@@ -163,6 +175,7 @@ def main():
     print(f"eval_interval: {eval_interval}")
     print(f"eval_size: {eval_size}")
     print(f"lr: {lr}")
+    print(f"dropout: {dropout}")
     print(f"device: {device}")
 
     torch.manual_seed(42)
@@ -187,7 +200,9 @@ def main():
         Y = data[ix.unsqueeze(1) + offsets + 1]
         return X, Y
 
-    model = GPTLM(vocab.size, block_size, emb_dim, num_blocks, head_size).to(device)
+    model = GPTLM(vocab.size, block_size, emb_dim, num_blocks, head_size, dropout).to(
+        device
+    )
     optimizer = torch.optim.AdamW(model.parameters(), lr)
 
     num_params = sum(p.numel() for p in model.parameters())
