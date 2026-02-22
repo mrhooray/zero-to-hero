@@ -31,8 +31,9 @@ class Head(nn.Module):
         q = self.query(X)  # B, T, head_size
         k = self.key(X)
         v = self.value(X)
-        _, T, _ = q.shape
+        _, T, head_size = q.shape
         w = q @ k.transpose(-2, -1)  # B, T, T
+        w = w * head_size**-0.5  # scale by contracting dimension
         w = w.masked_fill(self.mask[:T, :T] == 0, -torch.inf)
         w = F.softmax(w, dim=-1)
         o = w @ v  # B, T, head_size
