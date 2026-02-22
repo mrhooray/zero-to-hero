@@ -69,6 +69,18 @@ class FeedForward(nn.Module):
         return self.ff(X)
 
 
+class Block(nn.Module):
+    def __init__(self, block_size, emb_dim, head_size):
+        super().__init__()
+        self.attn = MultiHeadAttention(block_size, emb_dim, head_size)
+        self.ff = FeedForward(emb_dim)
+
+    def forward(self, X):
+        X = self.attn(X)
+        X = self.ff(X)
+        return X
+
+
 class GPTLM(nn.Module):
     def __init__(self, vocab_size, block_size, emb_size):
         super().__init__()
