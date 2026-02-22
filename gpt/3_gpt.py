@@ -99,17 +99,24 @@ class Block(nn.Module):
 
 
 class GPTLM(nn.Module):
-    def __init__(self, vocab_size, block_size, emb_size):
+    def __init__(self, vocab_size, block_size, emb_size, num_blocks, head_size):
         super().__init__()
         self.tok_to_emb = nn.Embedding(vocab_size, emb_size)
         self.pos_to_emb = nn.Embedding(block_size, emb_size)
+        self.blocks = nn.Sequential(
+            *[Block(block_size, emb_size, head_size) for _ in range(num_blocks)]
+        )
+        self.ln = LayerNorm(emb_size)
         self.head = nn.Linear(emb_size, vocab_size)
 
     def forward(self, X, Y=None):
         B, T = X.shape
         emb_tok = self.tok_to_emb(X)  # B, T, C
         emb_pos = self.pos_to_emb(torch.arange(T))  # T, C
-        logits = self.head(emb_tok + emb_pos)  # B, T, vocab_size
+        x = emb_tok + emb_pos
+        x = self.blocks(x)
+        x = self.ln(x)
+        logits = self.head(x)  # B, T, vocab_size
 
         if Y is None:
             loss = None
@@ -133,6 +140,8 @@ class GPTLM(nn.Module):
 def main():
     block_size = 8
     emb_dim = 32
+    num_blocks = 4
+    head_size = 8
     batch_size = 128
     steps = 1024 * 128
     eval_interval = 1024
@@ -147,6 +156,9 @@ def main():
         device = "cpu"
 
     print(f"block_size: {block_size}")
+    print(f"emb_dim: {emb_dim}")
+    print(f"num_blocks: {num_blocks}")
+    print(f"head_size: {head_size}")
     print(f"batch_size: {batch_size}")
     print(f"steps: {steps}")
     print(f"eval_interval: {eval_interval}")
@@ -176,8 +188,11 @@ def main():
         Y = data[ix.unsqueeze(1) + offsets + 1]
         return X, Y
 
-    model = GPTLM(vocab.size, block_size, emb_dim).to(device)
+    model = GPTLM(vocab.size, block_size, emb_dim, num_blocks, head_size).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr)
+
+    num_params = sum(p.numel() for p in model.parameters())
+    print(f"num_params: {num_params:,}")
 
     @torch.inference_mode()
     def estimate_loss():
