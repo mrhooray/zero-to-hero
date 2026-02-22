@@ -44,10 +44,10 @@ class Head(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, block_size, emb_dim, head_size, dropout):
+    def __init__(self, block_size, emb_dim, num_heads, dropout):
         super().__init__()
-        assert emb_dim % head_size == 0, "emb_dim must be divisible by head_size"
-        num_heads = emb_dim // head_size
+        assert emb_dim % num_heads == 0, "emb_dim must be divisible by num_heads"
+        head_size = emb_dim // num_heads
         self.heads = nn.ModuleList(
             [Head(block_size, emb_dim, head_size, dropout) for _ in range(num_heads)]
         )
@@ -92,10 +92,10 @@ class LayerNorm(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, block_size, emb_dim, head_size, dropout):
+    def __init__(self, block_size, emb_dim, num_heads, dropout):
         super().__init__()
         self.ln1 = LayerNorm(emb_dim)
-        self.attn = MultiHeadAttention(block_size, emb_dim, head_size, dropout)
+        self.attn = MultiHeadAttention(block_size, emb_dim, num_heads, dropout)
         self.ln2 = LayerNorm(emb_dim)
         self.ff = FeedForward(emb_dim, dropout)
 
@@ -107,14 +107,14 @@ class Block(nn.Module):
 
 class GPTLM(nn.Module):
     def __init__(
-        self, vocab_size, block_size, emb_size, num_blocks, head_size, dropout
+        self, vocab_size, block_size, emb_size, num_blocks, num_heads, dropout
     ):
         super().__init__()
         self.tok_to_emb = nn.Embedding(vocab_size, emb_size)
         self.pos_to_emb = nn.Embedding(block_size, emb_size)
         self.blocks = nn.Sequential(
             *[
-                Block(block_size, emb_size, head_size, dropout)
+                Block(block_size, emb_size, num_heads, dropout)
                 for _ in range(num_blocks)
             ]
         )
@@ -153,7 +153,7 @@ def main():
     block_size = 64
     emb_dim = 256
     num_blocks = 4
-    head_size = 32
+    num_heads = 8
     batch_size = 128
     steps = 1024 * 128
     eval_interval = 1024
@@ -170,7 +170,7 @@ def main():
     print(f"block_size: {block_size}")
     print(f"emb_dim: {emb_dim}")
     print(f"num_blocks: {num_blocks}")
-    print(f"head_size: {head_size}")
+    print(f"num_heads: {num_heads}")
     print(f"batch_size: {batch_size}")
     print(f"steps: {steps}")
     print(f"eval_interval: {eval_interval}")
@@ -201,7 +201,7 @@ def main():
         Y = data[ix.unsqueeze(1) + offsets + 1]
         return X, Y
 
-    model = GPTLM(vocab.size, block_size, emb_dim, num_blocks, head_size, dropout).to(
+    model = GPTLM(vocab.size, block_size, emb_dim, num_blocks, num_heads, dropout).to(
         device
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr)
