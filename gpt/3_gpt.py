@@ -76,8 +76,8 @@ class Block(nn.Module):
         self.ff = FeedForward(emb_dim)
 
     def forward(self, X):
-        X = self.attn(X)
-        X = self.ff(X)
+        X = X + self.attn(X)
+        X = X + self.ff(X)
         return X
 
 
