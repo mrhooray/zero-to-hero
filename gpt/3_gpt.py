@@ -150,10 +150,10 @@ class GPTLM(nn.Module):
 
 
 def main():
-    block_size = 8
-    emb_dim = 32
+    block_size = 64
+    emb_dim = 256
     num_blocks = 4
-    head_size = 8
+    head_size = 32
     batch_size = 128
     steps = 1024 * 128
     eval_interval = 1024
