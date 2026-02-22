@@ -87,12 +87,14 @@ class LayerNorm(nn.Module):
 class Block(nn.Module):
     def __init__(self, block_size, emb_dim, head_size):
         super().__init__()
+        self.ln1 = LayerNorm(emb_dim)
         self.attn = MultiHeadAttention(block_size, emb_dim, head_size)
+        self.ln2 = LayerNorm(emb_dim)
         self.ff = FeedForward(emb_dim)
 
     def forward(self, X):
-        X = X + self.attn(X)
-        X = X + self.ff(X)
+        X = X + self.attn(self.ln1(X))  # pre-norm
+        X = X + self.ff(self.ln2(X))  # pre-norm
         return X
 
 
