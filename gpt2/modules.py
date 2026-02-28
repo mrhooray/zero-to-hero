@@ -14,49 +14,32 @@ class Config:
     dropout: float = 0.0
 
 
-class Head(nn.Module):
-    def __init__(self, config: Config, head_size: int):
+class CausalSelfAttention(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.key = nn.Linear(config.emb_dim, head_size, bias=False)
-        self.query = nn.Linear(config.emb_dim, head_size, bias=False)
-        self.value = nn.Linear(config.emb_dim, head_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout)
-        self.register_buffer(
-            "mask", torch.ones(config.block_size, config.block_size).tril()
-        )
+        assert config.emb_dim % config.num_heads == 0
+        self.proj_heads = nn.Linear(config.emb_dim, config.emb_dim * 3)
+        self.proj_output = nn.Linear(config.emb_dim, config.emb_dim)
+        self.dropout_output = nn.Dropout(config.dropout)
+        self.emb_dim = config.emb_dim
+        self.num_heads = config.num_heads
+        self.dropout = config.dropout
 
     def forward(self, X):
-        q = self.query(X)  # B, T, head_size
-        k = self.key(X)
-        v = self.value(X)
-        _, T, head_size = q.shape
-        w = q @ k.transpose(-2, -1)  # B, T, T
-        w = w * head_size**-0.5  # scale by contracting dimension
-        w = w.masked_fill(self.mask[:T, :T] == 0, -torch.inf)
-        w = F.softmax(w, dim=-1)
-        w = self.dropout(w)
-        o = w @ v  # B, T, head_size
-        return o
+        B, T, C = X.shape
 
+        q, k, v = self.proj_heads(X).split(self.emb_dim, dim=-1)
+        q = q.view(B, T, self.num_heads, self.emb_dim // self.num_heads).transpose(1, 2)
+        k = k.view(B, T, self.num_heads, self.emb_dim // self.num_heads).transpose(1, 2)
+        v = v.view(B, T, self.num_heads, self.emb_dim // self.num_heads).transpose(1, 2)
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self, config: Config):
-        super().__init__()
-        assert config.emb_dim % config.num_heads == 0, (
-            "emb_dim must be divisible by num_heads"
-        )
-        head_size = config.emb_dim // config.num_heads
-        self.heads = nn.ModuleList(
-            [Head(config, head_size) for _ in range(config.num_heads)]
-        )
-        self.proj = nn.Linear(config.emb_dim, config.emb_dim)
-        self.dropout = nn.Dropout(config.dropout)
+        dropout = self.dropout if self.training else 0.0
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True, dropout_p=dropout)
 
-    def forward(self, X):
-        o = torch.cat([head(X) for head in self.heads], dim=-1)
-        o = self.proj(o)
-        o = self.dropout(o)
-        return o
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+        y = self.proj_output(y)
+        y = self.dropout_output(y)
+        return y
 
 
 class FeedForward(nn.Module):
@@ -93,7 +76,7 @@ class Block(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.ln1 = LayerNorm(config.emb_dim)
-        self.attn = MultiHeadAttention(config)
+        self.attn = CausalSelfAttention(config)
         self.ln2 = LayerNorm(config.emb_dim)
         self.ff = FeedForward(config)
 
