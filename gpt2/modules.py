@@ -78,7 +78,10 @@ class GPT(nn.Module):
         self.emb_dropout = nn.Dropout(config.dropout)
         self.blocks = nn.Sequential(*[Block(config) for _ in range(config.num_layers)])
         self.ln = nn.LayerNorm(config.emb_dim, bias=False)
-        self.head = nn.Linear(config.emb_dim, config.vocab_size)
+        self.head = nn.Linear(config.emb_dim, config.vocab_size, bias=False)
+
+        # weight tying
+        self.tok_to_emb.weight = self.head.weight
 
     def forward(self, X, Y=None):
         B, T = X.shape
