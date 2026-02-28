@@ -48,7 +48,6 @@ class FeedForward(nn.Module):
         self.ff = nn.Sequential(
             nn.Linear(config.emb_dim, config.emb_dim * expansion),
             nn.GELU(approximate="tanh"),
-            nn.Dropout(config.dropout),
             nn.Linear(config.emb_dim * expansion, config.emb_dim),
             nn.Dropout(config.dropout),
         )
@@ -76,6 +75,7 @@ class GPT(nn.Module):
         super().__init__()
         self.tok_to_emb = nn.Embedding(config.vocab_size, config.emb_dim)
         self.pos_to_emb = nn.Embedding(config.block_size, config.emb_dim)
+        self.emb_dropout = nn.Dropout(config.dropout)
         self.blocks = nn.Sequential(*[Block(config) for _ in range(config.num_layers)])
         self.ln = nn.LayerNorm(config.emb_dim, bias=False)
         self.head = nn.Linear(config.emb_dim, config.vocab_size)
@@ -85,6 +85,7 @@ class GPT(nn.Module):
         emb_tok = self.tok_to_emb(X)  # B, T, C
         emb_pos = self.pos_to_emb(torch.arange(T, device=X.device))  # T, C
         x = emb_tok + emb_pos
+        x = self.emb_dropout(x)
         x = self.blocks(x)
         x = self.ln(x)
         logits = self.head(x)  # B, T, vocab_size
