@@ -107,11 +107,12 @@ class GPT(nn.Module):
         x = self.emb_dropout(x)
         x = self.blocks(x)
         x = self.ln(x)
-        logits = self.head(x)  # B, T, vocab_size
 
         if Y is None:
+            logits = self.head(x[:, [-1], :])
             loss = None
         else:
+            logits = self.head(x)
             B, T, C = logits.shape
             loss = F.cross_entropy(logits.view(B * T, C), Y.view(B * T))
 
