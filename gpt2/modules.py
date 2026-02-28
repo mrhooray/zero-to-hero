@@ -57,27 +57,12 @@ class FeedForward(nn.Module):
         return self.ff(X)
 
 
-class LayerNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-5):
-        super().__init__()
-        self.eps = eps
-
-        self.weight = nn.Parameter(torch.ones(dim))
-        self.bias = nn.Parameter(torch.zeros(dim))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        batch_mean = x.mean(-1, keepdim=True)
-        batch_var = x.var(-1, keepdim=True, unbiased=False)
-        x_norm = (x - batch_mean) / torch.sqrt(batch_var + self.eps)
-        return self.weight * x_norm + self.bias
-
-
 class Block(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.ln1 = LayerNorm(config.emb_dim)
+        self.ln1 = nn.LayerNorm(config.emb_dim, bias=False)
         self.attn = CausalSelfAttention(config)
-        self.ln2 = LayerNorm(config.emb_dim)
+        self.ln2 = nn.LayerNorm(config.emb_dim, bias=False)
         self.ff = FeedForward(config)
 
     def forward(self, X):
@@ -92,7 +77,7 @@ class GPT(nn.Module):
         self.tok_to_emb = nn.Embedding(config.vocab_size, config.emb_dim)
         self.pos_to_emb = nn.Embedding(config.block_size, config.emb_dim)
         self.blocks = nn.Sequential(*[Block(config) for _ in range(config.num_layers)])
-        self.ln = LayerNorm(config.emb_dim)
+        self.ln = nn.LayerNorm(config.emb_dim, bias=False)
         self.head = nn.Linear(config.emb_dim, config.vocab_size)
 
     def forward(self, X, Y=None):
