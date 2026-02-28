@@ -47,7 +47,7 @@ class FeedForward(nn.Module):
         super().__init__()
         self.ff = nn.Sequential(
             nn.Linear(config.emb_dim, config.emb_dim * expansion),
-            nn.ReLU(),
+            nn.GELU(approximate="tanh"),
             nn.Dropout(config.dropout),
             nn.Linear(config.emb_dim * expansion, config.emb_dim),
             nn.Dropout(config.dropout),
