@@ -1,16 +1,29 @@
+from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
+@dataclass
+class Config:
+    vocab_size: int = 50257
+    block_size: int = 1024
+    emb_dim: int = 768
+    num_heads: int = 12
+    num_layers: int = 12
+    dropout: float = 0.0
+
+
 class Head(nn.Module):
-    def __init__(self, block_size, emb_dim, head_size, dropout):
+    def __init__(self, config: Config, head_size: int):
         super().__init__()
-        self.key = nn.Linear(emb_dim, head_size, bias=False)
-        self.query = nn.Linear(emb_dim, head_size, bias=False)
-        self.value = nn.Linear(emb_dim, head_size, bias=False)
-        self.dropout = nn.Dropout(dropout)
-        self.register_buffer("mask", torch.ones(block_size, block_size).tril())
+        self.key = nn.Linear(config.emb_dim, head_size, bias=False)
+        self.query = nn.Linear(config.emb_dim, head_size, bias=False)
+        self.value = nn.Linear(config.emb_dim, head_size, bias=False)
+        self.dropout = nn.Dropout(config.dropout)
+        self.register_buffer(
+            "mask", torch.ones(config.block_size, config.block_size).tril()
+        )
 
     def forward(self, X):
         q = self.query(X)  # B, T, head_size
@@ -27,15 +40,17 @@ class Head(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, block_size, emb_dim, num_heads, dropout):
+    def __init__(self, config: Config):
         super().__init__()
-        assert emb_dim % num_heads == 0, "emb_dim must be divisible by num_heads"
-        head_size = emb_dim // num_heads
-        self.heads = nn.ModuleList(
-            [Head(block_size, emb_dim, head_size, dropout) for _ in range(num_heads)]
+        assert config.emb_dim % config.num_heads == 0, (
+            "emb_dim must be divisible by num_heads"
         )
-        self.proj = nn.Linear(emb_dim, emb_dim)
-        self.dropout = nn.Dropout(dropout)
+        head_size = config.emb_dim // config.num_heads
+        self.heads = nn.ModuleList(
+            [Head(config, head_size) for _ in range(config.num_heads)]
+        )
+        self.proj = nn.Linear(config.emb_dim, config.emb_dim)
+        self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, X):
         o = torch.cat([head(X) for head in self.heads], dim=-1)
@@ -45,14 +60,14 @@ class MultiHeadAttention(nn.Module):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, emb_dim, dropout, expansion=4):
+    def __init__(self, config: Config, expansion=4):
         super().__init__()
         self.ff = nn.Sequential(
-            nn.Linear(emb_dim, emb_dim * expansion),
+            nn.Linear(config.emb_dim, config.emb_dim * expansion),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(emb_dim * expansion, emb_dim),
-            nn.Dropout(dropout),
+            nn.Dropout(config.dropout),
+            nn.Linear(config.emb_dim * expansion, config.emb_dim),
+            nn.Dropout(config.dropout),
         )
 
     def forward(self, X):
@@ -75,12 +90,12 @@ class LayerNorm(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, block_size, emb_dim, num_heads, dropout):
+    def __init__(self, config: Config):
         super().__init__()
-        self.ln1 = LayerNorm(emb_dim)
-        self.attn = MultiHeadAttention(block_size, emb_dim, num_heads, dropout)
-        self.ln2 = LayerNorm(emb_dim)
-        self.ff = FeedForward(emb_dim, dropout)
+        self.ln1 = LayerNorm(config.emb_dim)
+        self.attn = MultiHeadAttention(config)
+        self.ln2 = LayerNorm(config.emb_dim)
+        self.ff = FeedForward(config)
 
     def forward(self, X):
         X = X + self.attn(self.ln1(X))  # pre-norm
@@ -89,20 +104,13 @@ class Block(nn.Module):
 
 
 class GPT(nn.Module):
-    def __init__(
-        self, vocab_size, block_size, emb_size, num_blocks, num_heads, dropout
-    ):
+    def __init__(self, config: Config):
         super().__init__()
-        self.tok_to_emb = nn.Embedding(vocab_size, emb_size)
-        self.pos_to_emb = nn.Embedding(block_size, emb_size)
-        self.blocks = nn.Sequential(
-            *[
-                Block(block_size, emb_size, num_heads, dropout)
-                for _ in range(num_blocks)
-            ]
-        )
-        self.ln = LayerNorm(emb_size)
-        self.head = nn.Linear(emb_size, vocab_size)
+        self.tok_to_emb = nn.Embedding(config.vocab_size, config.emb_dim)
+        self.pos_to_emb = nn.Embedding(config.block_size, config.emb_dim)
+        self.blocks = nn.Sequential(*[Block(config) for _ in range(config.num_layers)])
+        self.ln = LayerNorm(config.emb_dim)
+        self.head = nn.Linear(config.emb_dim, config.vocab_size)
 
     def forward(self, X, Y=None):
         B, T = X.shape
