@@ -38,6 +38,7 @@ print(f"eval_batches: {eval_batches}")
 print(f"device: {device}")
 
 torch.manual_seed(42)
+torch.set_float32_matmul_precision("high")
 
 loader_train = DataLoader("train", batch_size, block_size, device)
 loader_val = DataLoader("val", batch_size, block_size, device)
