@@ -232,6 +232,10 @@ def main():
         optimizer.step()
 
         if step % eval_interval == 0:
+            if device == "cuda":
+                torch.cuda.synchronize()
+            elif device == "mps":
+                torch.mps.synchronize()
             t1 = time.time()
             losses = estimate_loss()
             elapsed = t1 - t0
