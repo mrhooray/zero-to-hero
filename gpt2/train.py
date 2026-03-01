@@ -24,6 +24,8 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
+autocast_dtype = torch.bfloat16 if device == "cuda" else None
+
 print(f"vocab_size: {vocab_size}")
 print(f"block_size: {block_size}")
 print(f"emb_dim: {emb_dim}")
@@ -63,7 +65,12 @@ def estimate_loss():
         losses = torch.zeros(eval_batches, device=device)
         for i in range(eval_batches):
             X, Y = loader.next_batch()
-            _, loss = model(X, Y)
+            with torch.autocast(
+                device_type=device,
+                dtype=autocast_dtype,
+                enabled=autocast_dtype is not None,
+            ):
+                _, loss = model(X, Y)
             losses[i] = loss
         out[split] = losses.mean().item()
     return out
@@ -73,7 +80,10 @@ model.train()
 t0 = time.time()
 for step in range(steps):
     X, Y = loader_train.next_batch()
-    _, loss = model(X, Y)
+    with torch.autocast(
+        device_type=device, dtype=autocast_dtype, enabled=autocast_dtype is not None
+    ):
+        _, loss = model(X, Y)
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     optimizer.step()
