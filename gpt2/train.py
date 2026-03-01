@@ -12,10 +12,10 @@ num_heads = 12
 num_layers = 12
 dropout = 0.2
 batch_size = 16
-steps = 1024 * 128
+steps = 1024 * 1
 lr = 3e-4
-eval_interval = 1024
-eval_batches = 256
+eval_interval = 1
+eval_batches = 1
 
 if torch.cuda.is_available():
     device = "cuda"
