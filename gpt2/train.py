@@ -79,10 +79,12 @@ for step in range(steps):
 
     if step % eval_interval == 0:
         t1 = time.time()
+        elapsed = t1 - t0
+        tokens_per_sec = batch_size * block_size * eval_interval / elapsed
         model.eval()
         losses = estimate_loss()
         model.train()
         print(
-            f"step {step:6d} | train {losses['train']:.4f} | val {losses['val']:.4f} | {t1 - t0:.2f}s"
+            f"step {step:8d} | train {losses['train']:8.4f} | val {losses['val']:8.4f} | {elapsed * 1000:8.2f}ms | {tokens_per_sec:8.0f} tok/s"
         )
         t0 = time.time()
