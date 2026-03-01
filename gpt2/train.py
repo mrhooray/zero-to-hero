@@ -78,6 +78,10 @@ for step in range(steps):
     optimizer.step()
 
     if step % eval_interval == 0:
+        if device == "cuda":
+            torch.cuda.synchronize()
+        elif device == "mps":
+            torch.mps.synchronize()
         t1 = time.time()
         elapsed = t1 - t0
         tokens_per_sec = batch_size * block_size * eval_interval / elapsed
