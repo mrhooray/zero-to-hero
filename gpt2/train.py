@@ -5,7 +5,12 @@ import torch
 from data import DataLoader, enc
 from modules import Config, GPT
 
-vocab_size = enc.n_vocab
+
+def nice(n, multiple):
+    return ((n + multiple - 1) // multiple) * multiple
+
+
+vocab_size = nice(enc.n_vocab, 256)
 block_size = 1024
 emb_dim = 768
 num_heads = 12
