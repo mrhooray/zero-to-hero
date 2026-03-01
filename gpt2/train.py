@@ -54,6 +54,7 @@ config = Config(
     dropout=dropout,
 )
 model = GPT(config).to(device)
+model = torch.compile(model)
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 print(f"num_params: {sum(p.numel() for p in model.parameters()):,}")
 
