@@ -29,6 +29,21 @@ def train():
     runpy.run_path("/root/gpt2/train.py", run_name="__main__")
 
 
-@app.local_entrypoint()
-def main():
-    train.remote()
+@app.function(
+    image=image,
+    gpu="a100-80gb:8",
+    timeout=60 * 60 * 24,
+)
+def train_ddp():
+    import subprocess
+    import sys
+
+    sys.path.insert(0, "/root/gpt2")
+    subprocess.run(
+        [
+            "torchrun",
+            "--nproc_per_node=8",
+            "/root/gpt2/train_ddp.py",
+        ],
+        check=True,
+    )
