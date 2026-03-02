@@ -73,6 +73,7 @@ class Block(nn.Module):
 class GPT(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        self.config = config
         self.tok_to_emb = nn.Embedding(config.vocab_size, config.emb_dim)
         self.pos_to_emb = nn.Embedding(config.block_size, config.emb_dim)
         self.emb_dropout = nn.Dropout(config.dropout)
@@ -82,6 +83,21 @@ class GPT(nn.Module):
 
         # weight tying
         self.tok_to_emb.weight = self.head.weight
+
+        # init params
+        std = 0.02
+        for name, module in self.named_modules():
+            if isinstance(module, nn.Linear):
+                std_cond = std
+                if name.endswith("proj_output") or name.endswith("ff.2"):
+                    # each block adds 2 residual contributions (attn + ff); scale down
+                    # so the residual stream variance stays ~1 after num_layers blocks
+                    std_cond /= (2 * self.config.num_layers) ** 0.5
+                nn.init.normal_(module.weight, mean=0.0, std=std_cond)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
 
     def forward(self, X, Y=None):
         B, T = X.shape
@@ -104,7 +120,12 @@ class GPT(nn.Module):
     @torch.inference_mode()
     def generate(self, X, max_new_tokens):
         for _ in range(max_new_tokens):
-            logits, _ = self(X)
+            X_ctx = (
+                X
+                if X.size(1) <= self.config.block_size
+                else X[:, -self.config.block_size :]
+            )
+            logits, _ = self(X_ctx)
             logits = logits[:, -1, :]
             probs = F.softmax(logits, dim=-1)
             X_next = torch.multinomial(probs, num_samples=1)
