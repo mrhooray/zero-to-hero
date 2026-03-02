@@ -26,7 +26,7 @@ lr_warmup_steps = 128
 weight_decay = 0.1
 eval_interval = 256
 eval_batches = 1
-hellaswag_interval = 256
+eval_hellaswag = False
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -51,7 +51,7 @@ print(f"lr_warmup_steps: {lr_warmup_steps}")
 print(f"weight_decay: {weight_decay}")
 print(f"eval_interval: {eval_interval}")
 print(f"eval_batches: {eval_batches}")
-print(f"hellaswag_interval: {hellaswag_interval}")
+print(f"eval_hellaswag: {eval_hellaswag}")
 print(f"device: {device}")
 
 torch.manual_seed(42)
@@ -136,17 +136,23 @@ for step in range(steps):
         tokens_per_sec = batch_size * block_size * eval_interval / elapsed
         model.eval()
         losses = estimate_loss()
+        if eval_hellaswag:
+            correct, total = hellaswag.evaluate(model, device, block_size)
         model.train()
-        # gpt2-124M target: val ~3.0-3.1
-        print(
-            f"step {step:8d} | train {losses['train']:8.4f} | val {losses['val']:8.4f} | lr {get_lr(step):8.2e} | {elapsed * 1000:8.2f}ms | {tokens_per_sec:8.0f} tok/s"
-        )
+        parts = [
+            f"step {step:8d}",
+            f"train {losses['train']:8.4f}",
+            # gpt2-124M target: ~3.0-3.1
+            f"val {losses['val']:8.4f}",
+            # gpt2-124M target: ~0.2950
+            *(
+                [f"hellaswag: {correct.item() / total.item():.4f}"]
+                if eval_hellaswag
+                else []
+            ),
+            f"lr {get_lr(step):.2e}",
+            f"{elapsed * 1000:8.2f}ms",
+            f"{tokens_per_sec:8.0f} tok/s",
+        ]
+        print(" | ".join(parts))
         t0 = time.time()
-
-    if step % hellaswag_interval == 0:
-        model.eval()
-        correct, total = hellaswag.evaluate(model, device, block_size)
-        model.train()
-        c, t = correct.item(), total.item()
-        # gpt2-124M target: ~0.2950
-        print(f"step {step:8d} | hellaswag {c}/{t} ({c / t:.4f})")

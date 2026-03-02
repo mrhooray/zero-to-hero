@@ -6,7 +6,7 @@
 # - is_master (rank == 0) guard on all prints
 # - estimate_loss: dist.all_reduce to average losses across ranks
 # - tokens_per_sec multiplied by world_size to reflect total throughput
-# - hellaswag eval: sharded across ranks, correct/total all_reduced before printing
+# - hellaswag eval: enabled, sharded across ranks, correct/total all_reduced before printing
 # (gradient clipping identical to train.py)
 
 import math
@@ -39,7 +39,7 @@ lr_warmup_steps = 128
 weight_decay = 0.1
 eval_interval = 256
 eval_batches = 1
-hellaswag_interval = 256
+eval_hellaswag = True
 
 dist.init_process_group(backend="nccl")
 rank = dist.get_rank()
@@ -65,7 +65,7 @@ if is_master:
     print(f"weight_decay: {weight_decay}")
     print(f"eval_interval: {eval_interval}")
     print(f"eval_batches: {eval_batches}")
-    print(f"hellaswag_interval: {hellaswag_interval}")
+    print(f"eval_hellaswag: {eval_hellaswag}")
     print(f"world_size: {world_size}")
 
 torch.manual_seed(42)
@@ -149,25 +149,30 @@ for step in range(steps):
         tokens_per_sec = batch_size * block_size * eval_interval * world_size / elapsed
         model.eval()
         losses = estimate_loss()
-        model.train()
-        if is_master:
-            # gpt2-124M target: val ~3.0-3.1
-            print(
-                f"step {step:8d} | train {losses['train']:8.4f} | val {losses['val']:8.4f} | lr {get_lr(step):8.2e} | {elapsed * 1000:8.2f}ms | {tokens_per_sec:8.0f} tok/s"
+        if eval_hellaswag:
+            correct, total = hellaswag.evaluate(
+                model, device, block_size, rank=rank, world_size=world_size
             )
-        t0 = time.time()
-
-    if step % hellaswag_interval == 0:
-        model.eval()
-        correct, total = hellaswag.evaluate(
-            model, device, block_size, rank=rank, world_size=world_size
-        )
+            dist.all_reduce(correct, op=dist.ReduceOp.SUM)
+            dist.all_reduce(total, op=dist.ReduceOp.SUM)
         model.train()
-        dist.all_reduce(correct, op=dist.ReduceOp.SUM)
-        dist.all_reduce(total, op=dist.ReduceOp.SUM)
         if is_master:
-            c, t = correct.item(), total.item()
-            # gpt2-124M target: ~0.2950
-            print(f"step {step:8d} | hellaswag {c}/{t} ({c / t:.4f})")
+            parts = [
+                f"step {step:8d}",
+                f"train {losses['train']:8.4f}",
+                # gpt2-124M target: ~3.0-3.1
+                f"val {losses['val']:8.4f}",
+                # gpt2-124M target: ~0.2950
+                *(
+                    [f"hellaswag: {correct.item() / total.item():.4f}"]
+                    if eval_hellaswag
+                    else []
+                ),
+                f"lr {get_lr(step):.2e}",
+                f"{elapsed * 1000:8.2f}ms",
+                f"{tokens_per_sec:8.0f} tok/s",
+            ]
+            print(" | ".join(parts))
+        t0 = time.time()
 
 dist.destroy_process_group()
