@@ -16,10 +16,14 @@ image = (
 )
 
 
+hf_secret = modal.Secret.from_name("huggingface")
+
+
 @app.function(
     image=image,
     gpu="a100-80gb",
-    timeout=60 * 60 * 24,  # modal max value
+    timeout=60 * 60 * 24,
+    secrets=[hf_secret],
 )
 def train():
     import runpy
@@ -33,6 +37,7 @@ def train():
     image=image,
     gpu="a100-80gb:8",
     timeout=60 * 60 * 12,
+    secrets=[hf_secret],
 )
 def train_ddp():
     import subprocess
