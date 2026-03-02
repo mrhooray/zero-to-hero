@@ -3,6 +3,7 @@ import time
 
 import torch
 
+import hellaswag
 from data import DataLoader, enc
 from modules import Config, GPT
 
@@ -25,6 +26,7 @@ lr_warmup_steps = 128
 weight_decay = 0.1
 eval_interval = 1
 eval_batches = 1
+hellaswag_interval = 256
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -49,6 +51,7 @@ print(f"lr_warmup_steps: {lr_warmup_steps}")
 print(f"weight_decay: {weight_decay}")
 print(f"eval_interval: {eval_interval}")
 print(f"eval_batches: {eval_batches}")
+print(f"hellaswag_interval: {hellaswag_interval}")
 print(f"device: {device}")
 
 torch.manual_seed(42)
@@ -138,3 +141,10 @@ for step in range(steps):
             f"step {step:8d} | train {losses['train']:8.4f} | val {losses['val']:8.4f} | lr {get_lr(step):8.2e} | {elapsed * 1000:8.2f}ms | {tokens_per_sec:8.0f} tok/s"
         )
         t0 = time.time()
+
+    if step % hellaswag_interval == 0:
+        model.eval()
+        correct, total = hellaswag.evaluate(model, device, block_size)
+        model.train()
+        c, t = correct.item(), total.item()
+        print(f"step {step:8d} | hellaswag {c}/{t} ({c / t:.4f})")
