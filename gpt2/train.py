@@ -65,7 +65,9 @@ config = Config(
 )
 model = GPT(config).to(device)
 model = torch.compile(model)
-optimizer = torch.optim.AdamW(model.parameters(), lr=lr_max)
+optimizer = torch.optim.AdamW(
+    model.parameters(), lr=lr_max, betas=(0.9, 0.95), eps=1e-8
+)
 print(f"num_params: {sum(p.numel() for p in model.parameters()):,}")
 
 
