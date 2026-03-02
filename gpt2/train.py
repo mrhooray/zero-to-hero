@@ -22,6 +22,7 @@ steps = 1024 * 1
 lr_max = 3e-4
 lr_min = lr_max * 0.1
 lr_warmup_steps = 128
+weight_decay = 0.1
 eval_interval = 1
 eval_batches = 1
 
@@ -45,6 +46,7 @@ print(f"steps: {steps}")
 print(f"lr_max: {lr_max}")
 print(f"lr_min: {lr_min}")
 print(f"lr_warmup_steps: {lr_warmup_steps}")
+print(f"weight_decay: {weight_decay}")
 print(f"eval_interval: {eval_interval}")
 print(f"eval_batches: {eval_batches}")
 print(f"device: {device}")
@@ -65,8 +67,16 @@ config = Config(
 )
 model = GPT(config).to(device)
 model = torch.compile(model)
+decay_params = [p for p in model.parameters() if p.dim() >= 2]
+no_decay_params = [p for p in model.parameters() if p.dim() < 2]
 optimizer = torch.optim.AdamW(
-    model.parameters(), lr=lr_max, betas=(0.9, 0.95), eps=1e-8
+    [
+        {"params": decay_params, "weight_decay": weight_decay},
+        {"params": no_decay_params, "weight_decay": 0.0},
+    ],
+    lr=lr_max,
+    betas=(0.9, 0.95),
+    eps=1e-8,
 )
 print(f"num_params: {sum(p.numel() for p in model.parameters()):,}")
 
