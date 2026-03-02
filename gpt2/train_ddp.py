@@ -67,7 +67,9 @@ if is_master:
 torch.manual_seed(42)
 torch.set_float32_matmul_precision("high")
 
-loader_train = DataLoader("train", batch_size, block_size, device)
+loader_train = DataLoader(
+    "train", batch_size, block_size, device, rank=rank, world_size=world_size
+)
 loader_val = DataLoader("val", batch_size, block_size, device)
 
 config = Config(

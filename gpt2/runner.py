@@ -8,7 +8,7 @@ image = (
     modal.Image.from_registry(
         "pytorch/pytorch:2.10.0-cuda12.6-cudnn9-runtime",
     )
-    .uv_pip_install("tiktoken")
+    .uv_pip_install("tiktoken", "datasets")
     .add_local_dir(
         local_path=Path(__file__).parent,
         remote_path="/root/gpt2",
