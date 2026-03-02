@@ -77,6 +77,7 @@ optimizer = torch.optim.AdamW(
     lr=lr_max,
     betas=(0.9, 0.95),
     eps=1e-8,
+    fused=device == "cuda",
 )
 print(f"num_params: {sum(p.numel() for p in model.parameters()):,}")
 
