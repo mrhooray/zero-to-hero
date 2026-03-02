@@ -32,12 +32,12 @@ num_heads = 12
 num_layers = 12
 dropout = 0.2
 batch_size = 16
-steps = 1024 * 1
+steps = 40_000_000_000 // (batch_size * block_size)  # 40B tokens
 lr_max = 3e-4
 lr_min = lr_max * 0.1
 lr_warmup_steps = 128
 weight_decay = 0.1
-eval_interval = 1
+eval_interval = 256
 eval_batches = 1
 hellaswag_interval = 256
 
@@ -151,6 +151,7 @@ for step in range(steps):
         losses = estimate_loss()
         model.train()
         if is_master:
+            # gpt2-124M target: val ~3.0-3.1
             print(
                 f"step {step:8d} | train {losses['train']:8.4f} | val {losses['val']:8.4f} | lr {get_lr(step):8.2e} | {elapsed * 1000:8.2f}ms | {tokens_per_sec:8.0f} tok/s"
             )
@@ -166,6 +167,7 @@ for step in range(steps):
         dist.all_reduce(total, op=dist.ReduceOp.SUM)
         if is_master:
             c, t = correct.item(), total.item()
+            # gpt2-124M target: ~0.2950
             print(f"step {step:8d} | hellaswag {c}/{t} ({c / t:.4f})")
 
 dist.destroy_process_group()

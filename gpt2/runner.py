@@ -19,7 +19,7 @@ image = (
 @app.function(
     image=image,
     gpu="a100-80gb",
-    timeout=60 * 60 * 24,
+    timeout=60 * 60 * 24,  # modal max value
 )
 def train():
     import runpy
@@ -32,7 +32,7 @@ def train():
 @app.function(
     image=image,
     gpu="a100-80gb:8",
-    timeout=60 * 60 * 24,
+    timeout=60 * 60 * 12,
 )
 def train_ddp():
     import subprocess
