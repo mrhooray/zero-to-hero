@@ -1,3 +1,4 @@
+import math
 import time
 
 import torch
@@ -18,7 +19,9 @@ num_layers = 12
 dropout = 0.2
 batch_size = 16
 steps = 1024 * 1
-lr = 3e-4
+lr_max = 3e-4
+lr_min = lr_max * 0.1
+lr_warmup_steps = 128
 eval_interval = 1
 eval_batches = 1
 
@@ -39,7 +42,9 @@ print(f"num_layers: {num_layers}")
 print(f"dropout: {dropout}")
 print(f"batch_size: {batch_size}")
 print(f"steps: {steps}")
-print(f"lr: {lr}")
+print(f"lr_max: {lr_max}")
+print(f"lr_min: {lr_min}")
+print(f"lr_warmup_steps: {lr_warmup_steps}")
 print(f"eval_interval: {eval_interval}")
 print(f"eval_batches: {eval_batches}")
 print(f"device: {device}")
@@ -60,7 +65,7 @@ config = Config(
 )
 model = GPT(config).to(device)
 model = torch.compile(model)
-optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr_max)
 print(f"num_params: {sum(p.numel() for p in model.parameters()):,}")
 
 
@@ -82,6 +87,14 @@ def estimate_loss():
     return out
 
 
+def get_lr(step):
+    if step < lr_warmup_steps:
+        return lr_max * (step + 1) / lr_warmup_steps
+    progress = (step - lr_warmup_steps) / (steps - lr_warmup_steps)
+    cosine = 0.5 * (1 + math.cos(math.pi * progress))
+    return lr_min + (lr_max - lr_min) * cosine
+
+
 model.train()
 t0 = time.time()
 for step in range(steps):
@@ -90,6 +103,8 @@ for step in range(steps):
         device_type=device, dtype=autocast_dtype, enabled=autocast_dtype is not None
     ):
         _, loss = model(X, Y)
+    for param_group in optimizer.param_groups:
+        param_group["lr"] = get_lr(step)
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -107,6 +122,6 @@ for step in range(steps):
         losses = estimate_loss()
         model.train()
         print(
-            f"step {step:8d} | train {losses['train']:8.4f} | val {losses['val']:8.4f} | {elapsed * 1000:8.2f}ms | {tokens_per_sec:8.0f} tok/s"
+            f"step {step:8d} | train {losses['train']:8.4f} | val {losses['val']:8.4f} | lr {get_lr(step):8.2e} | {elapsed * 1000:8.2f}ms | {tokens_per_sec:8.0f} tok/s"
         )
         t0 = time.time()
