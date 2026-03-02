@@ -92,6 +92,7 @@ for step in range(steps):
         _, loss = model(X, Y)
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     optimizer.step()
 
     if step % eval_interval == 0:
