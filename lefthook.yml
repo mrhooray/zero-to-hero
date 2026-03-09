@@ -6,3 +6,9 @@ pre-commit:
       glob: "**/*.py"
       run: uv run ruff check --fix {staged_files} && uv run ruff format {staged_files} && uv run pytest
       stage_fixed: true
+
+    gpu-mojo:
+      glob: "**/*.mojo"
+      root: "gpu-mojo"
+      run: pixi run format
+      stage_fixed: true
