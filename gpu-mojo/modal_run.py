@@ -1,8 +1,8 @@
 """Run mojo-gpu-puzzles on Modal with NVIDIA GPU.
 
 Usage:
-    PUZZLE=p01 modal run runner.py
-    PUZZLE=p15 GPU=A10G modal run runner.py
+    PUZZLE=p01 modal run modal_run.py
+    PUZZLE=p15 GPU=A10G modal run modal_run.py
 """
 
 import os
@@ -19,19 +19,16 @@ image = (
     modal.Image.debian_slim()
     .apt_install("curl", "bash", "ca-certificates")
     .run_commands("curl -fsSL https://pixi.sh/install.sh | PIXI_HOME=/usr/local bash")
+    .workdir("/app")
     .add_local_file("pixi.toml", "/app/pixi.toml", copy=True)
     .add_local_file("pixi.lock", "/app/pixi.lock", copy=True)
-    .run_commands("cd /app && pixi install -e nvidia")
-    .add_local_dir(
-        ".",
-        remote_path="/app",
-        copy=False,
-        ignore=[".pixi", ".git", "book/src/puzzles_images", "book/html"],
-    )
+    .add_local_dir("scripts", remote_path="/app/scripts", copy=True)
+    .run_commands("pixi install -e nvidia")
+    .add_local_dir("problems", remote_path="/app/problems", copy=False)
 )
 
 
-@app.function(image=image, gpu=_gpu, timeout=600)
+@app.function(image=image, cpu=1, memory=1024, gpu=_gpu, timeout=600)
 def run(puzzle: str):
     import subprocess
 
