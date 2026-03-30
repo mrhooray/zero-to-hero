@@ -63,6 +63,7 @@ fn collaborative_filter(
     a: LayoutTensor[dtype, vector_layout, ImmutAnyOrigin],
 ):
     thread_id = thread_idx.x
+    print(0000, thread_id)
 
     # Shared memory workspace for collaborative processing
     shared_workspace = LayoutTensor[
@@ -75,6 +76,8 @@ fn collaborative_filter(
     # Phase 1: Initialize shared workspace (all threads participate)
     if thread_id < SIZE - 1:
         shared_workspace[thread_id] = rebind[Scalar[dtype]](a[thread_id])
+
+    print(1111, thread_id)
     barrier()
 
     # Phase 2: Collaborative processing
@@ -82,7 +85,8 @@ fn collaborative_filter(
         # Apply collaborative filter with neighbors
         if thread_id > 0:
             shared_workspace[thread_id] += shared_workspace[thread_id - 1] * 0.5
-        barrier()
+    print(2222, thread_id)
+    barrier()
 
     # Phase 3: Final synchronization and output
     barrier()
