@@ -1,19 +1,14 @@
 """Run mojo-gpu-puzzles on Modal with NVIDIA GPU.
 
 Usage:
-    PUZZLE=p01 modal run modal_run.py
-    PUZZLE=p15 GPU=A10G modal run modal_run.py
+    modal run modal_run.py --puzzle p01
+    modal run modal_run.py --puzzle p01 --gpu A100-80GB
+    modal run modal_run.py --puzzle p09 --args "--first-case"
 """
-
-import os
 
 import modal
 
 app = modal.App("mojo-gpu-puzzles")
-
-# GPU must be set at module load time — Modal reads the decorator on import.
-_gpu = os.environ.get("GPU", "A10")
-_puzzle = os.environ.get("PUZZLE", "p01")
 
 image = (
     modal.Image.debian_slim()
@@ -28,13 +23,15 @@ image = (
 )
 
 
-@app.function(image=image, cpu=1, memory=1024, gpu=_gpu, timeout=600)
-def run(puzzle: str):
-    import subprocess
+@app.cls(image=image, cpu=1, memory=1024, gpu="A10", timeout=600)
+class Runner:
+    @modal.method()
+    def run(self, puzzle: str, extra_args: list[str] = []):
+        import subprocess
 
-    subprocess.run(["pixi", "run", puzzle], cwd="/app", check=True)
+        subprocess.run(["pixi", "run", puzzle] + extra_args, cwd="/app", check=True)
 
 
 @app.local_entrypoint()
-def main():
-    run.remote(_puzzle)
+def main(puzzle: str = "p01", gpu: str = "A10", args: str = ""):
+    Runner.with_options(gpu=gpu)().run.remote(puzzle, args.split() if args else [])
