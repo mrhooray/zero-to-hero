@@ -21,6 +21,7 @@ fn add_10(
     a: UnsafePointer[Scalar[dtype], MutAnyOrigin],
 ):
     i = thread_idx.x
+    print(output, a, i)
     output[i] = a[i] + 10.0
 
 
@@ -106,7 +107,7 @@ def main():
         print()
 
         with DeviceContext() as ctx:
-            input_buf = ctx.enqueue_create_buffer[dtype](0)
+            input_buf = ctx.enqueue_create_buffer[dtype](SIZE)
             result_buf = ctx.enqueue_create_buffer[dtype](SIZE)
             result_buf.enqueue_fill(0)
 
