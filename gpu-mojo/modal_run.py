@@ -4,6 +4,8 @@ Usage:
     modal run modal_run.py --puzzle p01
     modal run modal_run.py --puzzle p01 --gpu A100-80GB
     modal run modal_run.py --puzzle p09 --args "--first-case"
+    modal run modal_run.py --puzzle p10 --sanitizer --tool memcheck --args "--memory-bug"
+    modal run modal_run.py --puzzle p10 --sanitizer --tool racecheck --args "--race-condition"
 """
 
 import modal
@@ -31,7 +33,25 @@ class Runner:
 
         subprocess.run(["pixi", "run", puzzle] + extra_args, cwd="/app", check=True)
 
+    @modal.method()
+    def run_sanitizer(self, puzzle: str, tool: str, extra_args: list[str] = []):
+        import os
+        import subprocess
+
+        env = {**os.environ, "MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE_PERCENT": "0"}
+        cmd = [
+            "pixi", "run", "compute-sanitizer",
+            "--tool", tool,
+            "mojo", f"problems/{puzzle}/{puzzle}.mojo",
+        ] + extra_args
+        subprocess.run(cmd, cwd="/app", check=True, env=env)
+
 
 @app.local_entrypoint()
-def main(puzzle: str = "p01", gpu: str = "A10", args: str = ""):
-    Runner.with_options(gpu=gpu)().run.remote(puzzle, args.split() if args else [])
+def main(puzzle: str = "p01", gpu: str = "A10", args: str = "", sanitizer: bool = False, tool: str = ""):
+    extra_args = args.split() if args else []
+    runner = Runner.with_options(gpu=gpu)()
+    if sanitizer:
+        runner.run_sanitizer.remote(puzzle, tool, extra_args)
+    else:
+        runner.run.remote(puzzle, extra_args)
