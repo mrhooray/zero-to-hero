@@ -40,7 +40,7 @@ system-requirements = { macos = "15.0" }
 [dependencies]
 python = "==3.12"
 mojo = "<1.0.0" # includes `mojo-compiler`, lsp, debugger, formatter etc.
-max = "==26.2.0.dev2026030205"
+max = "==26.3.0.dev2026042005"
 bash = ">=5.2.21,<6"
 
 [environments]
@@ -63,28 +63,23 @@ p02 = "mojo problems/p02/p02.mojo"
 p03 = "mojo problems/p03/p03.mojo"
 
 p04 = "mojo problems/p04/p04.mojo"
-p04_layout_tensor = "mojo problems/p04/p04_layout_tensor.mojo"
+p04_tile_tensor = "mojo problems/p04/p04_tile_tensor.mojo"
 
 p05 = "mojo problems/p05/p05.mojo"
-p05_layout_tensor = "mojo problems/p05/p05_layout_tensor.mojo"
 
 p06 = "mojo problems/p06/p06.mojo"
 
 p07 = "mojo problems/p07/p07.mojo"
-p07_layout_tensor = "mojo problems/p07/p07_layout_tensor.mojo"
 
 p08 = "mojo problems/p08/p08.mojo"
-p08_layout_tensor = "mojo problems/p08/p08_layout_tensor.mojo"
 
 p09 = "mojo problems/p09/p09.mojo"
 
 p10 = "mojo problems/p10/p10.mojo"
 
 p11 = "mojo problems/p11/p11.mojo"
-p11_layout_tensor = "mojo problems/p11/p11_layout_tensor.mojo"
 
 p12 = "mojo problems/p12/p12.mojo"
-p12_layout_tensor = "mojo problems/p12/p12_layout_tensor.mojo"
 
 p13 = "mojo problems/p13/p13.mojo"
 
