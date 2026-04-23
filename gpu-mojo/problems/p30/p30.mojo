@@ -1,9 +1,10 @@
-from gpu import thread_idx, block_dim, block_idx
-from gpu.host import DeviceContext
-from layout import Layout, LayoutTensor
-from sys import argv
-from testing import assert_almost_equal
-from benchmark import Bench, BenchConfig, Bencher, BenchId, keep
+from std.gpu import thread_idx, block_dim, block_idx
+from std.gpu.host import DeviceContext
+from layout import TileTensor
+from layout.tile_layout import row_major
+from std.sys import argv
+from std.testing import assert_almost_equal
+from std.benchmark import Bench, BenchConfig, Bencher, BenchId, keep
 
 comptime SIZE = 16 * 1024 * 1024  # 16M elements - large enough to show memory patterns
 comptime THREADS_PER_BLOCK = (1024, 1)  # Max CUDA threads per block
@@ -12,19 +13,18 @@ comptime BLOCKS_PER_GRID = (
     1,
 )  # Enough blocks to cover all elements
 comptime dtype = DType.float32
-comptime layout = Layout.row_major(SIZE)
+comptime layout = row_major[SIZE]()
+comptime LayoutType = type_of(layout)
 
 
 # ANCHOR: kernel1
-fn kernel1[
-    layout: Layout
-](
-    output: LayoutTensor[dtype, layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, layout, ImmutAnyOrigin],
+def kernel1(
+    output: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
     size: Int,
 ):
-    i = Int(block_dim.x * block_idx.x + thread_idx.x)
+    var i = block_dim.x * block_idx.x + thread_idx.x
     if i < size:
         output[i] = a[i] + b[i]
 
@@ -33,18 +33,16 @@ fn kernel1[
 
 
 # ANCHOR: kernel2
-fn kernel2[
-    layout: Layout
-](
-    output: LayoutTensor[dtype, layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, layout, ImmutAnyOrigin],
+def kernel2(
+    output: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
     size: Int,
 ):
-    tid = Int(block_idx.x * block_dim.x + thread_idx.x)
-    stride = 512
+    var tid = block_idx.x * block_dim.x + thread_idx.x
+    var stride = 512
 
-    i = tid
+    var i = tid
     while i < size:
         output[i] = a[i] + b[i]
         i += stride
@@ -54,21 +52,19 @@ fn kernel2[
 
 
 # ANCHOR: kernel3
-fn kernel3[
-    layout: Layout
-](
-    output: LayoutTensor[dtype, layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, layout, ImmutAnyOrigin],
+def kernel3(
+    output: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
     size: Int,
 ):
-    tid = Int(block_idx.x * block_dim.x + thread_idx.x)
-    total_threads = (SIZE // 1024) * 1024
+    var tid = block_idx.x * block_dim.x + thread_idx.x
+    var total_threads = (SIZE // 1024) * 1024
 
     for step in range(0, size, total_threads):
-        forward_i = step + tid
+        var forward_i = step + tid
         if forward_i < size:
-            reverse_i = size - 1 - forward_i
+            var reverse_i = size - 1 - forward_i
             output[reverse_i] = a[reverse_i] + b[reverse_i]
 
 
@@ -77,28 +73,29 @@ fn kernel3[
 
 @parameter
 @always_inline
-fn benchmark_kernel1_parameterized[test_size: Int](mut b: Bencher) raises:
+def benchmark_kernel1_parameterized[test_size: Int](mut b: Bencher) raises:
     @parameter
     @always_inline
-    fn kernel1_workflow(ctx: DeviceContext) raises:
-        comptime layout = Layout.row_major(test_size)
-        out = ctx.enqueue_create_buffer[dtype](test_size)
+    def kernel1_workflow(ctx: DeviceContext) raises:
+        comptime layout = row_major[test_size]()
+        comptime LayoutType = type_of(layout)
+        var out = ctx.enqueue_create_buffer[dtype](test_size)
         out.enqueue_fill(0)
-        a = ctx.enqueue_create_buffer[dtype](test_size)
+        var a = ctx.enqueue_create_buffer[dtype](test_size)
         a.enqueue_fill(0)
-        b_buf = ctx.enqueue_create_buffer[dtype](test_size)
+        var b_buf = ctx.enqueue_create_buffer[dtype](test_size)
         b_buf.enqueue_fill(0)
 
         with a.map_to_host() as a_host, b_buf.map_to_host() as b_host:
             for i in range(test_size):
-                a_host[i] = Float32(i + 1)
-                b_host[i] = Float32(i + 2)
+                a_host[i] = Scalar[dtype](i + 1)
+                b_host[i] = Scalar[dtype](i + 2)
 
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out)
-        a_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](a)
-        b_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](b_buf)
+        var out_tensor = TileTensor(out, layout)
+        var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
+        var b_tensor = TileTensor[mut=False, dtype, LayoutType](b_buf, layout)
 
-        ctx.enqueue_function[kernel1[layout], kernel1[layout]](
+        ctx.enqueue_function[kernel1, kernel1](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -109,34 +106,35 @@ fn benchmark_kernel1_parameterized[test_size: Int](mut b: Bencher) raises:
         keep(out)
         ctx.synchronize()
 
-    bench_ctx = DeviceContext()
+    var bench_ctx = DeviceContext()
     b.iter_custom[kernel1_workflow](bench_ctx)
 
 
 @parameter
 @always_inline
-fn benchmark_kernel2_parameterized[test_size: Int](mut b: Bencher) raises:
+def benchmark_kernel2_parameterized[test_size: Int](mut b: Bencher) raises:
     @parameter
     @always_inline
-    fn kernel2_workflow(ctx: DeviceContext) raises:
-        comptime layout = Layout.row_major(test_size)
-        out = ctx.enqueue_create_buffer[dtype](test_size)
+    def kernel2_workflow(ctx: DeviceContext) raises:
+        comptime layout = row_major[test_size]()
+        comptime LayoutType = type_of(layout)
+        var out = ctx.enqueue_create_buffer[dtype](test_size)
         out.enqueue_fill(0)
-        a = ctx.enqueue_create_buffer[dtype](test_size)
+        var a = ctx.enqueue_create_buffer[dtype](test_size)
         a.enqueue_fill(0)
-        b_buf = ctx.enqueue_create_buffer[dtype](test_size)
+        var b_buf = ctx.enqueue_create_buffer[dtype](test_size)
         b_buf.enqueue_fill(0)
 
         with a.map_to_host() as a_host, b_buf.map_to_host() as b_host:
             for i in range(test_size):
-                a_host[i] = Float32(i + 1)
-                b_host[i] = Float32(i + 2)
+                a_host[i] = Scalar[dtype](i + 1)
+                b_host[i] = Scalar[dtype](i + 2)
 
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out)
-        a_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](a)
-        b_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](b_buf)
+        var out_tensor = TileTensor(out, layout)
+        var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
+        var b_tensor = TileTensor[mut=False, dtype, LayoutType](b_buf, layout)
 
-        ctx.enqueue_function[kernel2[layout], kernel2[layout]](
+        ctx.enqueue_function[kernel2, kernel2](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -147,34 +145,35 @@ fn benchmark_kernel2_parameterized[test_size: Int](mut b: Bencher) raises:
         keep(out)
         ctx.synchronize()
 
-    bench_ctx = DeviceContext()
+    var bench_ctx = DeviceContext()
     b.iter_custom[kernel2_workflow](bench_ctx)
 
 
 @parameter
 @always_inline
-fn benchmark_kernel3_parameterized[test_size: Int](mut b: Bencher) raises:
+def benchmark_kernel3_parameterized[test_size: Int](mut b: Bencher) raises:
     @parameter
     @always_inline
-    fn kernel3_workflow(ctx: DeviceContext) raises:
-        comptime layout = Layout.row_major(test_size)
-        out = ctx.enqueue_create_buffer[dtype](test_size)
+    def kernel3_workflow(ctx: DeviceContext) raises:
+        comptime layout = row_major[test_size]()
+        comptime LayoutType = type_of(layout)
+        var out = ctx.enqueue_create_buffer[dtype](test_size)
         out.enqueue_fill(0)
-        a = ctx.enqueue_create_buffer[dtype](test_size)
+        var a = ctx.enqueue_create_buffer[dtype](test_size)
         a.enqueue_fill(0)
-        b_buf = ctx.enqueue_create_buffer[dtype](test_size)
+        var b_buf = ctx.enqueue_create_buffer[dtype](test_size)
         b_buf.enqueue_fill(0)
 
         with a.map_to_host() as a_host, b_buf.map_to_host() as b_host:
             for i in range(test_size):
-                a_host[i] = Float32(i + 1)
-                b_host[i] = Float32(i + 2)
+                a_host[i] = Scalar[dtype](i + 1)
+                b_host[i] = Scalar[dtype](i + 2)
 
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out)
-        a_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](a)
-        b_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](b_buf)
+        var out_tensor = TileTensor(out, layout)
+        var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
+        var b_tensor = TileTensor[mut=False, dtype, LayoutType](b_buf, layout)
 
-        ctx.enqueue_function[kernel3[layout], kernel3[layout]](
+        ctx.enqueue_function[kernel3, kernel3](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -185,33 +184,33 @@ fn benchmark_kernel3_parameterized[test_size: Int](mut b: Bencher) raises:
         keep(out)
         ctx.synchronize()
 
-    bench_ctx = DeviceContext()
+    var bench_ctx = DeviceContext()
     b.iter_custom[kernel3_workflow](bench_ctx)
 
 
-def test_kernel1():
+def test_kernel1() raises:
     """Test kernel 1."""
     print("Testing kernel 1...")
     with DeviceContext() as ctx:
-        out = ctx.enqueue_create_buffer[dtype](SIZE)
+        var out = ctx.enqueue_create_buffer[dtype](SIZE)
         out.enqueue_fill(0)
-        a = ctx.enqueue_create_buffer[dtype](SIZE)
+        var a = ctx.enqueue_create_buffer[dtype](SIZE)
         a.enqueue_fill(0)
-        b = ctx.enqueue_create_buffer[dtype](SIZE)
+        var b = ctx.enqueue_create_buffer[dtype](SIZE)
         b.enqueue_fill(0)
 
         # Initialize test data
         with a.map_to_host() as a_host, b.map_to_host() as b_host:
             for i in range(SIZE):
-                a_host[i] = Float32(i + 1)
-                b_host[i] = Float32(i + 2)
+                a_host[i] = Scalar[dtype](i + 1)
+                b_host[i] = Scalar[dtype](i + 2)
 
-        # Create LayoutTensors
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out)
-        a_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](a)
-        b_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](b)
+        # Create TileTensors
+        var out_tensor = TileTensor(out, layout)
+        var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
+        var b_tensor = TileTensor[mut=False, dtype, LayoutType](b, layout)
 
-        ctx.enqueue_function[kernel1[layout], kernel1[layout]](
+        ctx.enqueue_function[kernel1, kernel1](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -225,36 +224,36 @@ def test_kernel1():
         # Verify results
         with out.map_to_host() as out_host, a.map_to_host() as a_host, b.map_to_host() as b_host:
             for i in range(10):  # Check first 10
-                expected = a_host[i] + b_host[i]
-                actual = out_host[i]
+                var expected = a_host[i] + b_host[i]
+                var actual = out_host[i]
                 assert_almost_equal(expected, actual)
 
-        print("✅ Kernel 1 test passed")
+        print("Kernel 1 test: passed")
 
 
-def test_kernel2():
+def test_kernel2() raises:
     """Test kernel 2."""
     print("Testing kernel 2...")
     with DeviceContext() as ctx:
-        out = ctx.enqueue_create_buffer[dtype](SIZE)
+        var out = ctx.enqueue_create_buffer[dtype](SIZE)
         out.enqueue_fill(0)
-        a = ctx.enqueue_create_buffer[dtype](SIZE)
+        var a = ctx.enqueue_create_buffer[dtype](SIZE)
         a.enqueue_fill(0)
-        b = ctx.enqueue_create_buffer[dtype](SIZE)
+        var b = ctx.enqueue_create_buffer[dtype](SIZE)
         b.enqueue_fill(0)
 
         # Initialize test data
         with a.map_to_host() as a_host, b.map_to_host() as b_host:
             for i in range(SIZE):
-                a_host[i] = Float32(i + 1)
-                b_host[i] = Float32(i + 2)
+                a_host[i] = Scalar[dtype](i + 1)
+                b_host[i] = Scalar[dtype](i + 2)
 
-        # Create LayoutTensors
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out)
-        a_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](a)
-        b_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](b)
+        # Create TileTensors
+        var out_tensor = TileTensor(out, layout)
+        var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
+        var b_tensor = TileTensor[mut=False, dtype, LayoutType](b, layout)
 
-        ctx.enqueue_function[kernel2[layout], kernel2[layout]](
+        ctx.enqueue_function[kernel2, kernel2](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -270,37 +269,37 @@ def test_kernel2():
         with out.map_to_host() as out_host, a.map_to_host() as a_host, b.map_to_host() as b_host:
             for i in range(SIZE):
                 if out_host[i] != 0:  # This element was processed
-                    expected = a_host[i] + b_host[i]
-                    actual = out_host[i]
+                    var expected = a_host[i] + b_host[i]
+                    var actual = out_host[i]
                     assert_almost_equal(expected, actual)
                     processed += 1
 
-        print("✅ Kernel 2 test passed,", processed, "elements processed")
+        print("Kernel 2 test: passed")
 
 
-def test_kernel3():
+def test_kernel3() raises:
     """Test kernel 3."""
     print("Testing kernel 3...")
     with DeviceContext() as ctx:
-        out = ctx.enqueue_create_buffer[dtype](SIZE)
+        var out = ctx.enqueue_create_buffer[dtype](SIZE)
         out.enqueue_fill(0)
-        a = ctx.enqueue_create_buffer[dtype](SIZE)
+        var a = ctx.enqueue_create_buffer[dtype](SIZE)
         a.enqueue_fill(0)
-        b = ctx.enqueue_create_buffer[dtype](SIZE)
+        var b = ctx.enqueue_create_buffer[dtype](SIZE)
         b.enqueue_fill(0)
 
         # Initialize test data
         with a.map_to_host() as a_host, b.map_to_host() as b_host:
             for i in range(SIZE):
-                a_host[i] = Float32(i + 1)
-                b_host[i] = Float32(i + 2)
+                a_host[i] = Scalar[dtype](i + 1)
+                b_host[i] = Scalar[dtype](i + 2)
 
-        # Create LayoutTensors
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out)
-        a_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](a)
-        b_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](b)
+        # Create TileTensors
+        var out_tensor = TileTensor(out, layout)
+        var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
+        var b_tensor = TileTensor[mut=False, dtype, LayoutType](b, layout)
 
-        ctx.enqueue_function[kernel3[layout], kernel3[layout]](
+        ctx.enqueue_function[kernel3, kernel3](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -314,16 +313,16 @@ def test_kernel3():
         # Verify results
         with out.map_to_host() as out_host, a.map_to_host() as a_host, b.map_to_host() as b_host:
             for i in range(SIZE):
-                expected = a_host[i] + b_host[i]
-                actual = out_host[i]
+                var expected = a_host[i] + b_host[i]
+                var actual = out_host[i]
                 assert_almost_equal(expected, actual)
 
-        print("✅ Kernel 3 test passed")
+        print("Kernel 3 test: passed")
 
 
-def main():
+def main() raises:
     """Run the memory access pattern tests."""
-    args = argv()
+    var args = argv()
     if len(args) < 2:
         print("Usage: mojo p30.mojo <flags>")
         print("  Flags:")
@@ -335,14 +334,14 @@ def main():
         return
 
     # Parse flags
-    run_kernel1 = False
-    run_kernel2 = False
-    run_kernel3 = False
-    run_all = False
-    run_benchmark = False
+    var run_kernel1 = False
+    var run_kernel2 = False
+    var run_kernel3 = False
+    var run_all = False
+    var run_benchmark = False
 
     for i in range(1, len(args)):
-        arg = args[i]
+        var arg = args[i]
         if arg == "--kernel1":
             run_kernel1 = True
         elif arg == "--kernel2":
@@ -377,13 +376,14 @@ def main():
         test_kernel1()
         test_kernel2()
         test_kernel3()
+        print("Puzzle 30 complete ✅")
 
     elif run_benchmark:
         print("\nRunning Kernel Performance Benchmarks...")
         print("Use nsys/ncu to profile these for detailed analysis!")
         print("-" * 50)
 
-        bench = Bench()
+        var bench = Bench()
 
         print("Benchmarking Kernel 1")
         bench.bench_function[benchmark_kernel1_parameterized[SIZE]](
@@ -409,3 +409,4 @@ def main():
             test_kernel2()
         if run_kernel3:
             test_kernel3()
+        print("Puzzle 30 complete ✅")

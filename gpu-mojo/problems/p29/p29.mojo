@@ -1,5 +1,5 @@
-from gpu import thread_idx, block_idx, block_dim, barrier
-from gpu.sync import (
+from std.gpu import thread_idx, block_idx, block_dim, barrier
+from std.gpu.sync import (
     mbarrier_init,
     mbarrier_arrive,
     mbarrier_test_wait,
@@ -7,12 +7,14 @@ from gpu.sync import (
     cp_async_bulk_commit_group,
     cp_async_bulk_wait_group,
 )
-from gpu.host import DeviceContext
-from gpu.memory import AddressSpace, async_copy_wait_all
-from layout import Layout, LayoutTensor
+from std.gpu.host import DeviceContext
+from std.gpu.memory import AddressSpace, async_copy_wait_all
+from layout import TileTensor
+from layout.tile_layout import row_major
+from layout.tile_tensor import stack_allocation
 from layout.layout_tensor import copy_dram_to_sram_async
-from sys import argv, info
-from testing import assert_true, assert_almost_equal
+from std.sys import argv, info
+from std.testing import assert_true, assert_almost_equal
 
 # ANCHOR: multi_stage_pipeline
 
@@ -21,7 +23,8 @@ comptime SIZE = 1024  # Image size (1D for simplicity)
 comptime BLOCKS_PER_GRID = (4, 1)
 comptime THREADS_PER_BLOCK = (TPB, 1)
 comptime dtype = DType.float32
-comptime layout = Layout.row_major(SIZE)
+comptime layout = row_major[SIZE]()
+comptime LayoutType = type_of(layout)
 
 # Multi-stage processing configuration
 comptime STAGE1_THREADS = TPB // 2
@@ -29,11 +32,9 @@ comptime STAGE2_THREADS = TPB // 2
 comptime BLUR_RADIUS = 2
 
 
-fn multi_stage_image_blur_pipeline[
-    layout: Layout
-](
-    output: LayoutTensor[dtype, layout, MutAnyOrigin],
-    input: LayoutTensor[dtype, layout, ImmutAnyOrigin],
+def multi_stage_image_blur_pipeline(
+    output: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
+    input: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
     size: Int,
 ):
     """Multi-stage image blur pipeline with barrier coordination.
@@ -44,21 +45,15 @@ fn multi_stage_image_blur_pipeline[
     """
 
     # Shared memory buffers for pipeline stages
-    input_shared = LayoutTensor[
-        dtype,
-        Layout.row_major(TPB),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
-    blur_shared = LayoutTensor[
-        dtype,
-        Layout.row_major(TPB),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
+    var input_shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[TPB]())
+    var blur_shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[TPB]())
 
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
-    local_i = Int(thread_idx.x)
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
 
     # Stage 1: Load and preprocess (threads 0-127)
 
@@ -88,11 +83,9 @@ comptime STENCIL_ITERATIONS = 3
 comptime BUFFER_COUNT = 2
 
 
-fn double_buffered_stencil_computation[
-    layout: Layout
-](
-    output: LayoutTensor[dtype, layout, MutAnyOrigin],
-    input: LayoutTensor[dtype, layout, ImmutAnyOrigin],
+def double_buffered_stencil_computation(
+    output: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
+    input: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
     size: Int,
 ):
     """Double-buffered stencil computation with memory barrier coordination.
@@ -102,41 +95,26 @@ fn double_buffered_stencil_computation[
     """
 
     # Double-buffering: Two shared memory buffers
-    buffer_A = LayoutTensor[
-        dtype,
-        Layout.row_major(TPB),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
-    buffer_B = LayoutTensor[
-        dtype,
-        Layout.row_major(TPB),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
+    var buffer_A = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[TPB]())
+    var buffer_B = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[TPB]())
 
     # Memory barriers for coordinating buffer swaps
-    init_barrier = LayoutTensor[
-        DType.uint64,
-        Layout.row_major(1),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
-    iter_barrier = LayoutTensor[
-        DType.uint64,
-        Layout.row_major(1),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
-    final_barrier = LayoutTensor[
-        DType.uint64,
-        Layout.row_major(1),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
+    var init_barrier = stack_allocation[
+        dtype=DType.uint64, address_space=AddressSpace.SHARED
+    ](row_major[1]())
+    var iter_barrier = stack_allocation[
+        dtype=DType.uint64, address_space=AddressSpace.SHARED
+    ](row_major[1]())
+    var final_barrier = stack_allocation[
+        dtype=DType.uint64, address_space=AddressSpace.SHARED
+    ](row_major[1]())
 
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
-    local_i = Int(thread_idx.x)
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
 
     # Initialize barriers (only thread 0)
     if local_i == 0:
@@ -153,11 +131,8 @@ fn double_buffered_stencil_computation[
     _ = mbarrier_test_wait(init_barrier.ptr, TPB)
 
     # Iterative stencil processing with double-buffering
-    @parameter
-    for iteration in range(STENCIL_ITERATIONS):
-
-        @parameter
-        if iteration % 2 == 0:
+    comptime for iteration in range(STENCIL_ITERATIONS):
+        comptime if iteration % 2 == 0:
             # Even iteration: Read from A, Write to B
 
             # FILL ME IN (roughly 12 lines)
@@ -179,9 +154,7 @@ fn double_buffered_stencil_computation[
 
     # Write final results from active buffer
     if local_i < TPB and global_i < size:
-
-        @parameter
-        if STENCIL_ITERATIONS % 2 == 0:
+        comptime if STENCIL_ITERATIONS % 2 == 0:
             # Even iterations end in buffer_A
             output[global_i] = buffer_A[local_i]
         else:
@@ -196,25 +169,27 @@ fn double_buffered_stencil_computation[
 # ANCHOR_END: double_buffered_stencil
 
 
-def test_multi_stage_pipeline():
+def test_multi_stage_pipeline() raises:
     """Test Puzzle 29A: Multi-Stage Pipeline Coordination."""
     with DeviceContext() as ctx:
-        out = ctx.enqueue_create_buffer[dtype](SIZE)
+        var out = ctx.enqueue_create_buffer[dtype](SIZE)
         out.enqueue_fill(0)
-        inp = ctx.enqueue_create_buffer[dtype](SIZE)
+        var inp = ctx.enqueue_create_buffer[dtype](SIZE)
         inp.enqueue_fill(0)
 
         # Initialize input with a simple pattern
         with inp.map_to_host() as inp_host:
             for i in range(SIZE):
                 # Create a simple wave pattern for blurring
-                inp_host[i] = Float32(i % 10) + Float32(i / 100.0)
+                inp_host[i] = Scalar[dtype](i % 10) + Scalar[dtype](i) / 100.0
 
-        # Create LayoutTensors
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out)
-        inp_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](inp)
+        # Create TileTensors
+        var out_tensor = TileTensor(out, layout)
+        var inp_tensor = TileTensor[
+            mut=False, dtype, LayoutType, ImmutAnyOrigin
+        ](inp, layout)
 
-        comptime kernel = multi_stage_image_blur_pipeline[layout]
+        comptime kernel = multi_stage_image_blur_pipeline
         ctx.enqueue_function[kernel, kernel](
             out_tensor,
             inp_tensor,
@@ -254,29 +229,31 @@ def test_multi_stage_pipeline():
                     out_host[i] < 1000.0, "Output values should be reasonable"
                 )
 
-            print("✅ Multi-stage pipeline coordination test PASSED!")
+            print("Puzzle 29 complete ✅")
 
 
-def test_double_buffered_stencil():
+def test_double_buffered_stencil() raises:
     """Test Puzzle 29B: Double-Buffered Stencil Computation."""
     with DeviceContext() as ctx:
         # Test Puzzle 29B: Double-Buffered Stencil Computation
-        out = ctx.enqueue_create_buffer[dtype](SIZE)
+        var out = ctx.enqueue_create_buffer[dtype](SIZE)
         out.enqueue_fill(0)
-        inp = ctx.enqueue_create_buffer[dtype](SIZE)
+        var inp = ctx.enqueue_create_buffer[dtype](SIZE)
         inp.enqueue_fill(0)
 
         # Initialize input with a different pattern for stencil testing
         with inp.map_to_host() as inp_host:
             for i in range(SIZE):
                 # Create a step pattern that will be smoothed by stencil
-                inp_host[i] = Float32(1.0 if i % 20 < 10 else 0.0)
+                inp_host[i] = Scalar[dtype](1.0 if i % 20 < 10 else 0.0)
 
-        # Create LayoutTensors for Puzzle 29B
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out)
-        inp_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](inp)
+        # Create TileTensors for Puzzle 29B
+        var out_tensor = TileTensor(out, layout)
+        var inp_tensor = TileTensor[
+            mut=False, dtype, LayoutType, ImmutAnyOrigin
+        ](inp, layout)
 
-        comptime kernel = double_buffered_stencil_computation[layout]
+        comptime kernel = double_buffered_stencil_computation
         ctx.enqueue_function[kernel, kernel](
             out_tensor,
             inp_tensor,
@@ -331,10 +308,10 @@ def test_double_buffered_stencil():
                 smooth_transitions, "Stencil should smooth sharp transitions"
             )
 
-            print("✅ Double-buffered stencil test PASSED!")
+            print("Puzzle 29 complete ✅")
 
 
-def main():
+def main() raises:
     """Run GPU synchronization tests based on command line arguments."""
     print("Puzzle 29: GPU Synchronization Primitives")
     print("=" * 50)

@@ -1,40 +1,39 @@
-from gpu import thread_idx, block_idx, block_dim, grid_dim, barrier
-from os.atomic import Atomic
-from gpu.primitives.warp import WARP_SIZE
-from gpu.primitives import block
-from gpu.host import DeviceContext
-from gpu.memory import AddressSpace
-from layout import Layout, LayoutTensor
-from sys import argv
-from testing import assert_equal
-from math import floor
+from std.gpu import thread_idx, block_idx, block_dim, grid_dim, barrier
+from std.atomic import Atomic
+from std.gpu.primitives.warp import WARP_SIZE
+from std.gpu.primitives import block
+from std.gpu.host import DeviceContext
+from std.gpu.memory import AddressSpace
+from layout import TileTensor
+from layout.tile_layout import row_major
+from layout.tile_tensor import stack_allocation
+from std.sys import argv
+from std.testing import assert_equal
+from std.math import floor
 
 
 # ANCHOR: traditional_dot_product
-fn traditional_dot_product[
-    in_layout: Layout, out_layout: Layout, tpb: Int
+def traditional_dot_product[
+    tpb: Int
 ](
-    output: LayoutTensor[dtype, out_layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
+    output: TileTensor[mut=True, dtype, OutLayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
     size: Int,
 ):
     """Traditional dot product using shared memory + barriers + tree reduction.
     Educational but complex - shows the manual coordination needed."""
 
-    shared = LayoutTensor[
-        dtype,
-        Layout.row_major(tpb),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
-    local_i = Int(thread_idx.x)
+    var shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[tpb]())
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
 
     # Each thread computes partial product
     if global_i < size:
-        a_val = rebind[Scalar[dtype]](a[global_i])
-        b_val = rebind[Scalar[dtype]](b[global_i])
+        var a_val = rebind[Scalar[dtype]](a[global_i])
+        var b_val = rebind[Scalar[dtype]](b[global_i])
         shared[local_i] = a_val * b_val
 
     barrier()
@@ -58,24 +57,26 @@ fn traditional_dot_product[
 comptime SIZE = 128
 comptime TPB = 128
 comptime NUM_BINS = 8
-comptime in_layout = Layout.row_major(SIZE)
-comptime out_layout = Layout.row_major(1)
+comptime in_layout = row_major[SIZE]()
+comptime InLayoutType = type_of(in_layout)
+comptime out_layout = row_major[1]()
+comptime OutLayoutType = type_of(out_layout)
 comptime dtype = DType.float32
 
 
-fn block_sum_dot_product[
-    in_layout: Layout, out_layout: Layout, tpb: Int
+def block_sum_dot_product[
+    tpb: Int
 ](
-    output: LayoutTensor[dtype, out_layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
+    output: TileTensor[mut=True, dtype, OutLayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
     size: Int,
 ):
     """Dot product using block.sum() - convenience function like warp.sum()!
     Replaces manual shared memory + barriers + tree reduction with one line."""
 
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
-    local_i = thread_idx.x
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
 
     # FILL IN (roughly 6 lines)
 
@@ -83,15 +84,18 @@ fn block_sum_dot_product[
 # ANCHOR_END: block_sum_dot_product
 
 # ANCHOR: block_histogram
-comptime bin_layout = Layout.row_major(SIZE)  # Max SIZE elements per bin
+comptime bin_layout = row_major[SIZE]()  # Max SIZE elements per bin
+comptime BinLayoutType = type_of(bin_layout)
 
 
-fn block_histogram_bin_extract[
-    in_layout: Layout, bin_layout: Layout, out_layout: Layout, tpb: Int
+def block_histogram_bin_extract[
+    tpb: Int
 ](
-    input_data: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
-    bin_output: LayoutTensor[dtype, bin_layout, MutAnyOrigin],
-    count_output: LayoutTensor[DType.int32, out_layout, MutAnyOrigin],
+    input_data: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
+    bin_output: TileTensor[mut=True, dtype, BinLayoutType, MutAnyOrigin],
+    count_output: TileTensor[
+        mut=True, DType.int32, OutLayoutType, MutAnyOrigin
+    ],
     size: Int,
     target_bin: Int,
     num_bins: Int,
@@ -104,8 +108,8 @@ fn block_histogram_bin_extract[
     3. Extract and pack only elements belonging to target_bin
     """
 
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
-    local_i = Int(thread_idx.x)
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
 
     # Step 1: Each thread determines its bin and element value
 
@@ -133,14 +137,15 @@ fn block_histogram_bin_extract[
 
 # ANCHOR: block_normalize
 
-comptime vector_layout = Layout.row_major(SIZE)
+comptime vector_layout = row_major[SIZE]()
+comptime VectorLayoutType = type_of(vector_layout)
 
 
-fn block_normalize_vector[
-    in_layout: Layout, out_layout: Layout, tpb: Int
+def block_normalize_vector[
+    tpb: Int
 ](
-    input_data: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
-    output_data: LayoutTensor[dtype, out_layout, MutAnyOrigin],
+    input_data: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
+    output_data: TileTensor[mut=True, dtype, VectorLayoutType, MutAnyOrigin],
     size: Int,
 ):
     """Vector mean normalization using block.sum() + block.broadcast() combination.
@@ -152,8 +157,8 @@ fn block_normalize_vector[
     4. Each thread normalizes: output[i] = input[i] / mean
     """
 
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
-    local_i = thread_idx.x
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
 
     # Step 1: Each thread loads its element
 
@@ -180,7 +185,7 @@ fn block_normalize_vector[
 # ANCHOR_END: block_normalize
 
 
-def main():
+def main() raises:
     if len(argv()) != 2:
         print(
             "Usage: --traditional-dot-product | --block-sum-dot-product |"
@@ -200,22 +205,24 @@ def main():
             var expected: Scalar[dtype] = 0.0
             with a.map_to_host() as a_host, b_buf.map_to_host() as b_host:
                 for i in range(SIZE):
-                    a_host[i] = i
-                    b_host[i] = 2 * i
+                    a_host[i] = Scalar[dtype](i)
+                    b_host[i] = Scalar[dtype](2 * i)
                     expected += a_host[i] * b_host[i]
 
             print("SIZE:", SIZE)
             print("TPB:", TPB)
             print("Expected result:", expected)
 
-            a_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](a)
-            b_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](b_buf)
-            out_tensor = LayoutTensor[dtype, out_layout, MutAnyOrigin](out)
+            a_tensor = TileTensor[
+                mut=False, dtype, InLayoutType, ImmutAnyOrigin
+            ](a, in_layout)
+            b_tensor = TileTensor[
+                mut=False, dtype, InLayoutType, ImmutAnyOrigin
+            ](b_buf, in_layout)
+            out_tensor = TileTensor(out, out_layout)
 
             # Traditional approach: works perfectly when size == TPB
-            comptime kernel = traditional_dot_product[
-                in_layout, out_layout, TPB
-            ]
+            comptime kernel = traditional_dot_product[TPB]
             ctx.enqueue_function[kernel, kernel](
                 out_tensor,
                 a_tensor,
@@ -231,6 +238,7 @@ def main():
                 result = result_host[0]
                 print("Traditional result:", result)
                 assert_equal(result, expected)
+                print("Puzzle 27 complete ✅")
                 print("Complex: shared memory + barriers + tree reduction")
 
         elif argv()[1] == "--block-sum-dot-product":
@@ -244,20 +252,24 @@ def main():
             var expected: Scalar[dtype] = 0.0
             with a.map_to_host() as a_host, b_buf.map_to_host() as b_host:
                 for i in range(SIZE):
-                    a_host[i] = i
-                    b_host[i] = 2 * i
+                    a_host[i] = Scalar[dtype](i)
+                    b_host[i] = Scalar[dtype](2 * i)
                     expected += a_host[i] * b_host[i]
 
             print("SIZE:", SIZE)
             print("TPB:", TPB)
             print("Expected result:", expected)
 
-            a_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](a)
-            b_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](b_buf)
-            out_tensor = LayoutTensor[dtype, out_layout, MutAnyOrigin](out)
+            a_tensor = TileTensor[
+                mut=False, dtype, InLayoutType, ImmutAnyOrigin
+            ](a, in_layout)
+            b_tensor = TileTensor[
+                mut=False, dtype, InLayoutType, ImmutAnyOrigin
+            ](b_buf, in_layout)
+            out_tensor = TileTensor(out, out_layout)
 
             # Block.sum(): Same result with dramatically simpler code!
-            comptime kernel = block_sum_dot_product[in_layout, out_layout, TPB]
+            comptime kernel = block_sum_dot_product[TPB]
             ctx.enqueue_function[kernel, kernel](
                 out_tensor,
                 a_tensor,
@@ -273,6 +285,7 @@ def main():
                 result = result_host[0]
                 print("Block.sum result:", result)
                 assert_equal(result, expected)
+                print("Puzzle 27 complete ✅")
                 print("Block.sum() gives identical results!")
                 print(
                     "Compare the code: 15+ lines of barriers → 1 line of"
@@ -295,7 +308,7 @@ def main():
                 for i in range(SIZE):
                     # Create values: 0.1, 0.2, 0.3, ..., cycling through bins
                     input_host[i] = (
-                        Float32(i % 80) / 100.0
+                        Scalar[dtype](i % 80) / 100.0
                     )  # Values [0.0, 0.79]
 
             print("Input sample:", end=" ")
@@ -305,9 +318,9 @@ def main():
             print("...")
             print()
 
-            input_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](
-                input_buf
-            )
+            input_tensor = TileTensor[
+                mut=False, dtype, InLayoutType, ImmutAnyOrigin
+            ](input_buf, in_layout)
 
             # Demonstrate histogram for each bin using block.prefix_sum()
             for target_bin in range(NUM_BINS):
@@ -315,29 +328,23 @@ def main():
                     "=== Processing Bin",
                     target_bin,
                     "(range [",
-                    Float32(target_bin) / NUM_BINS,
+                    Scalar[dtype](target_bin) / NUM_BINS,
                     ",",
-                    Float32(target_bin + 1) / NUM_BINS,
+                    Scalar[dtype](target_bin + 1) / NUM_BINS,
                     ")) ===",
                 )
 
                 # Create output buffers for this bin
-                bin_data = ctx.enqueue_create_buffer[dtype](SIZE)
+                var bin_data = ctx.enqueue_create_buffer[dtype](SIZE)
                 bin_data.enqueue_fill(0)
-                bin_count = ctx.enqueue_create_buffer[DType.int32](1)
+                var bin_count = ctx.enqueue_create_buffer[DType.int32](1)
                 bin_count.enqueue_fill(0)
 
-                bin_tensor = LayoutTensor[dtype, bin_layout, MutAnyOrigin](
-                    bin_data
-                )
-                count_tensor = LayoutTensor[
-                    DType.int32, out_layout, MutAnyOrigin
-                ](bin_count)
+                var bin_tensor = TileTensor(bin_data, bin_layout)
+                var count_tensor = TileTensor(bin_count, out_layout)
 
                 # Execute histogram kernel for this specific bin
-                comptime kernel = block_histogram_bin_extract[
-                    in_layout, bin_layout, out_layout, TPB
-                ]
+                comptime kernel = block_histogram_bin_extract[TPB]
                 ctx.enqueue_function[kernel, kernel](
                     input_tensor,
                     bin_tensor,
@@ -377,7 +384,7 @@ def main():
             # Create input data with known values for easy verification
             input_buf = ctx.enqueue_create_buffer[dtype](SIZE)
             input_buf.enqueue_fill(0)
-            output_buf = ctx.enqueue_create_buffer[dtype](SIZE)
+            var output_buf = ctx.enqueue_create_buffer[dtype](SIZE)
             output_buf.enqueue_fill(0)
 
             # Create test data: values like [1, 2, 3, 4, 5, ..., 8, 1, 2, 3, ...]
@@ -386,13 +393,13 @@ def main():
             with input_buf.map_to_host() as input_host:
                 for i in range(SIZE):
                     # Create values cycling 1-8, mean will be 4.5
-                    value = Float32(
+                    value = Scalar[dtype](
                         (i % 8) + 1
                     )  # Values 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, ...
                     input_host[i] = value
                     sum_value += value
 
-            var mean_value = sum_value / Float32(SIZE)
+            var mean_value = sum_value / Scalar[dtype](SIZE)
 
             print("Input sample:", end=" ")
             with input_buf.map_to_host() as input_host:
@@ -403,17 +410,13 @@ def main():
             print("Mean value:", mean_value)
             print()
 
-            input_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](
-                input_buf
-            )
-            output_tensor = LayoutTensor[dtype, vector_layout, MutAnyOrigin](
-                output_buf
-            )
+            input_tensor = TileTensor[
+                mut=False, dtype, InLayoutType, ImmutAnyOrigin
+            ](input_buf, in_layout)
+            var output_tensor = TileTensor(output_buf, vector_layout)
 
             # Execute vector normalization kernel
-            comptime kernel = block_normalize_vector[
-                in_layout, vector_layout, TPB
-            ]
+            comptime kernel = block_normalize_vector[TPB]
             ctx.enqueue_function[kernel, kernel](
                 input_tensor,
                 output_tensor,
@@ -437,7 +440,7 @@ def main():
                 for i in range(SIZE):
                     output_sum += output_host[i]
 
-                var output_mean = output_sum / Float32(SIZE)
+                var output_mean = output_sum / Scalar[dtype](SIZE)
                 print("Output sum:", output_sum)
                 print("Output mean:", output_mean)
                 print(
@@ -445,6 +448,7 @@ def main():
                     output_mean,
                     "(should be close to 1.0)",
                 )
+                print("Puzzle 27 complete ✅")
         else:
             print(
                 "Available options: [--traditional-dot-product |"

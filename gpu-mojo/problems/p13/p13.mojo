@@ -1,9 +1,11 @@
-from gpu import thread_idx, block_idx, block_dim, barrier
-from gpu.host import DeviceContext
-from gpu.memory import AddressSpace
-from layout import Layout, LayoutTensor
-from sys import argv
-from testing import assert_equal
+from std.gpu import thread_idx, block_idx, block_dim, barrier
+from std.gpu.host import DeviceContext
+from std.gpu.memory import AddressSpace
+from layout import TileTensor
+from layout.tile_layout import row_major
+from layout.tile_tensor import stack_allocation
+from std.sys import argv
+from std.testing import assert_equal
 
 # ANCHOR: conv_1d_simple
 comptime TPB = 8
@@ -12,20 +14,21 @@ comptime CONV = 3
 comptime BLOCKS_PER_GRID = (1, 1)
 comptime THREADS_PER_BLOCK = (TPB, 1)
 comptime dtype = DType.float32
-comptime in_layout = Layout.row_major(SIZE)
-comptime out_layout = Layout.row_major(SIZE)
-comptime conv_layout = Layout.row_major(CONV)
+comptime in_layout = row_major[SIZE]()
+comptime InLayout = type_of(in_layout)
+comptime out_layout = row_major[SIZE]()
+comptime OutLayout = type_of(out_layout)
+comptime conv_layout = row_major[CONV]()
+comptime ConvLayout = type_of(conv_layout)
 
 
-fn conv_1d_simple[
-    in_layout: Layout, out_layout: Layout, conv_layout: Layout
-](
-    output: LayoutTensor[dtype, out_layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, conv_layout, ImmutAnyOrigin],
+def conv_1d_simple(
+    output: TileTensor[mut=True, dtype, OutLayout, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, InLayout, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, ConvLayout, ImmutAnyOrigin],
 ):
-    global_i = block_dim.x * block_idx.x + thread_idx.x
-    local_i = Int(thread_idx.x)
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
     # FILL ME IN (roughly 14 lines)
 
 
@@ -36,43 +39,44 @@ comptime SIZE_2 = 15
 comptime CONV_2 = 4
 comptime BLOCKS_PER_GRID_2 = (2, 1)
 comptime THREADS_PER_BLOCK_2 = (TPB, 1)
-comptime in_2_layout = Layout.row_major(SIZE_2)
-comptime out_2_layout = Layout.row_major(SIZE_2)
-comptime conv_2_layout = Layout.row_major(CONV_2)
+comptime in_2_layout = row_major[SIZE_2]()
+comptime In2Layout = type_of(in_2_layout)
+comptime out_2_layout = row_major[SIZE_2]()
+comptime Out2Layout = type_of(out_2_layout)
+comptime conv_2_layout = row_major[CONV_2]()
+comptime Conv2Layout = type_of(conv_2_layout)
 
 
-fn conv_1d_block_boundary[
-    in_layout: Layout, out_layout: Layout, conv_layout: Layout, dtype: DType
-](
-    output: LayoutTensor[dtype, out_layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, conv_layout, ImmutAnyOrigin],
+def conv_1d_block_boundary(
+    output: TileTensor[mut=True, dtype, Out2Layout, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, In2Layout, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, Conv2Layout, ImmutAnyOrigin],
 ):
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
-    local_i = Int(thread_idx.x)
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
     # FILL ME IN (roughly 18 lines)
 
 
 # ANCHOR_END: conv_1d_block_boundary
 
 
-def main():
+def main() raises:
     with DeviceContext() as ctx:
-        size = SIZE_2 if argv()[1] == "--block-boundary" else SIZE
-        conv = CONV_2 if argv()[1] == "--block-boundary" else CONV
-        out = ctx.enqueue_create_buffer[dtype](size)
+        var size = SIZE_2 if argv()[1] == "--block-boundary" else SIZE
+        var conv = CONV_2 if argv()[1] == "--block-boundary" else CONV
+        var out = ctx.enqueue_create_buffer[dtype](size)
         out.enqueue_fill(0)
-        a = ctx.enqueue_create_buffer[dtype](size)
+        var a = ctx.enqueue_create_buffer[dtype](size)
         a.enqueue_fill(0)
-        b = ctx.enqueue_create_buffer[dtype](conv)
+        var b = ctx.enqueue_create_buffer[dtype](conv)
         b.enqueue_fill(0)
         with a.map_to_host() as a_host:
             for i in range(size):
-                a_host[i] = i
+                a_host[i] = Scalar[dtype](i)
 
         with b.map_to_host() as b_host:
             for i in range(conv):
-                b_host[i] = i
+                b_host[i] = Scalar[dtype](i)
 
         if len(argv()) != 2 or argv()[1] not in [
             "--simple",
@@ -84,11 +88,12 @@ def main():
             )
 
         if argv()[1] == "--simple":
-            var out_tensor = LayoutTensor[dtype, out_layout, MutAnyOrigin](out)
-            var a_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](a)
-            var b_tensor = LayoutTensor[dtype, conv_layout, ImmutAnyOrigin](b)
-            comptime kernel = conv_1d_simple[in_layout, out_layout, conv_layout]
-            ctx.enqueue_function[kernel, kernel](
+            var out_tensor = TileTensor(out, out_layout)
+            var a_tensor = TileTensor[mut=False, dtype, InLayout](a, in_layout)
+            var b_tensor = TileTensor[mut=False, dtype, ConvLayout](
+                b, conv_layout
+            )
+            ctx.enqueue_function[conv_1d_simple, conv_1d_simple](
                 out_tensor,
                 a_tensor,
                 b_tensor,
@@ -96,15 +101,16 @@ def main():
                 block_dim=THREADS_PER_BLOCK,
             )
         else:
-            var out_tensor = LayoutTensor[dtype, out_2_layout, MutAnyOrigin](
-                out
+            var out_tensor = TileTensor(out, out_2_layout)
+            var a_tensor = TileTensor[mut=False, dtype, In2Layout](
+                a, in_2_layout
             )
-            var a_tensor = LayoutTensor[dtype, in_2_layout, ImmutAnyOrigin](a)
-            var b_tensor = LayoutTensor[dtype, conv_2_layout, ImmutAnyOrigin](b)
-            comptime kernel = conv_1d_block_boundary[
-                in_2_layout, out_2_layout, conv_2_layout, dtype
-            ]
-            ctx.enqueue_function[kernel, kernel](
+            var b_tensor = TileTensor[mut=False, dtype, Conv2Layout](
+                b, conv_2_layout
+            )
+            ctx.enqueue_function[
+                conv_1d_block_boundary, conv_1d_block_boundary
+            ](
                 out_tensor,
                 a_tensor,
                 b_tensor,
@@ -113,7 +119,7 @@ def main():
             )
 
         ctx.synchronize()
-        expected = ctx.enqueue_create_host_buffer[dtype](size)
+        var expected = ctx.enqueue_create_host_buffer[dtype](size)
         expected.enqueue_fill(0)
 
         with a.map_to_host() as a_host, b.map_to_host() as b_host:
@@ -127,3 +133,4 @@ def main():
             print("expected:", expected)
             for i in range(size):
                 assert_equal(out_host[i], expected[i])
+            print("Puzzle 13 complete ✅")

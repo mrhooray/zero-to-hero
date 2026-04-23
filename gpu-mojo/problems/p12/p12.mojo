@@ -1,22 +1,30 @@
-from memory import UnsafePointer, stack_allocation
-from gpu import thread_idx, block_idx, block_dim, barrier
-from gpu.host import DeviceContext
-from gpu.memory import AddressSpace
-from testing import assert_equal
+from std.testing import assert_equal
+from std.gpu.host import DeviceContext
 
 # ANCHOR: dot_product
+from std.gpu import thread_idx, block_idx, block_dim, barrier
+from std.gpu.memory import AddressSpace
+from layout import TileTensor
+from layout.tile_layout import row_major
+from layout.tile_tensor import stack_allocation
+
+
 comptime TPB = 8
 comptime SIZE = 8
 comptime BLOCKS_PER_GRID = (1, 1)
 comptime THREADS_PER_BLOCK = (TPB, 1)
 comptime dtype = DType.float32
+comptime layout = row_major[SIZE]()
+comptime out_layout = row_major[1]()
+comptime LayoutType = type_of(layout)
+comptime OutLayout = type_of(out_layout)
 
 
-fn dot_product(
-    output: UnsafePointer[Scalar[dtype], MutAnyOrigin],
-    a: UnsafePointer[Scalar[dtype], MutAnyOrigin],
-    b: UnsafePointer[Scalar[dtype], MutAnyOrigin],
-    size: UInt,
+def dot_product(
+    output: TileTensor[mut=True, dtype, OutLayout, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
+    size: Int,
 ):
     # FILL ME IN (roughly 13 lines)
     ...
@@ -25,31 +33,35 @@ fn dot_product(
 # ANCHOR_END: dot_product
 
 
-def main():
+def main() raises:
     with DeviceContext() as ctx:
-        out = ctx.enqueue_create_buffer[dtype](1)
+        var out = ctx.enqueue_create_buffer[dtype](1)
         out.enqueue_fill(0)
-        a = ctx.enqueue_create_buffer[dtype](SIZE)
+        var a = ctx.enqueue_create_buffer[dtype](SIZE)
         a.enqueue_fill(0)
-        b = ctx.enqueue_create_buffer[dtype](SIZE)
+        var b = ctx.enqueue_create_buffer[dtype](SIZE)
         b.enqueue_fill(0)
+
         with a.map_to_host() as a_host, b.map_to_host() as b_host:
             for i in range(SIZE):
-                a_host[i] = i
-                b_host[i] = i
+                a_host[i] = Scalar[dtype](i)
+                b_host[i] = Scalar[dtype](i)
+
+        var out_tensor = TileTensor(out, out_layout)
+        var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
+        var b_tensor = TileTensor[mut=False, dtype, LayoutType](b, layout)
 
         ctx.enqueue_function[dot_product, dot_product](
-            out,
-            a,
-            b,
-            UInt(SIZE),
+            out_tensor,
+            a_tensor,
+            b_tensor,
+            SIZE,
             grid_dim=BLOCKS_PER_GRID,
             block_dim=THREADS_PER_BLOCK,
         )
 
-        expected = ctx.enqueue_create_host_buffer[dtype](1)
+        var expected = ctx.enqueue_create_host_buffer[dtype](1)
         expected.enqueue_fill(0)
-
         ctx.synchronize()
 
         with a.map_to_host() as a_host, b.map_to_host() as b_host:
@@ -60,3 +72,4 @@ def main():
             print("out:", out_host)
             print("expected:", expected)
             assert_equal(out_host[0], expected[0])
+            print("Puzzle 12 complete ✅")

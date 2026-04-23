@@ -1,15 +1,17 @@
-from math import ceildiv
-from gpu import thread_idx, block_idx, block_dim, barrier, lane_id
-from gpu.host import DeviceContext, HostBuffer, DeviceBuffer
-from gpu.memory import AddressSpace
-from gpu.primitives.warp import sum as warp_sum, WARP_SIZE
-from algorithm.functional import elementwise
-from layout import Layout, LayoutTensor
-from utils import IndexList
-from sys import argv, simd_width_of, align_of
-from testing import assert_equal
-from random import random_float64
-from benchmark import (
+from std.math import ceildiv
+from std.gpu import thread_idx, block_idx, block_dim, barrier, lane_id
+from std.gpu.host import DeviceContext, HostBuffer, DeviceBuffer
+from std.gpu.memory import AddressSpace
+from std.gpu.primitives.warp import sum as warp_sum, WARP_SIZE
+from std.algorithm.functional import elementwise
+from layout import TileTensor
+from layout.tile_layout import row_major
+from layout.tile_tensor import stack_allocation
+from std.utils import IndexList
+from std.sys import argv, simd_width_of, align_of
+from std.testing import assert_equal
+from std.random import random_float64
+from std.benchmark import (
     Bench,
     BenchConfig,
     Bencher,
@@ -27,28 +29,27 @@ comptime BLOCKS_PER_GRID = (1, 1)
 comptime THREADS_PER_BLOCK = (WARP_SIZE, 1)
 comptime dtype = DType.float32
 comptime SIMD_WIDTH = simd_width_of[dtype]()
-comptime in_layout = Layout.row_major(SIZE)
-comptime out_layout = Layout.row_major(1)
+comptime in_layout = row_major[SIZE]()
+comptime InLayoutType = type_of(in_layout)
+comptime out_layout = row_major[1]()
+comptime OutLayoutType = type_of(out_layout)
 
 
-fn traditional_dot_product_p12_style[
-    in_layout: Layout, out_layout: Layout, size: Int
+def traditional_dot_product_p12_style[
+    size: Int
 ](
-    output: LayoutTensor[dtype, out_layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
+    output: TileTensor[mut=True, dtype, OutLayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
 ):
     """
     This is the complex approach from p12_layout_tensor.mojo - kept for comparison.
     """
-    shared = LayoutTensor[
-        dtype,
-        Layout.row_major(WARP_SIZE),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
-    local_i = Int(thread_idx.x)
+    var shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[WARP_SIZE]())
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
 
     if global_i < size:
         shared[local_i] = (a[global_i] * b[global_i]).reduce_add()
@@ -57,7 +58,7 @@ fn traditional_dot_product_p12_style[
 
     barrier()
 
-    stride = WARP_SIZE // 2
+    var stride = WARP_SIZE // 2
     while stride > 0:
         if local_i < stride:
             shared[local_i] += shared[local_i + stride]
@@ -72,14 +73,14 @@ fn traditional_dot_product_p12_style[
 
 
 # ANCHOR: simple_warp_kernel
-fn simple_warp_dot_product[
-    in_layout: Layout, out_layout: Layout, size: Int
+def simple_warp_dot_product[
+    size: Int
 ](
-    output: LayoutTensor[dtype, out_layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
-    b: LayoutTensor[dtype, in_layout, ImmutAnyOrigin],
+    output: TileTensor[mut=True, dtype, OutLayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
+    b: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
 ):
-    global_i = Int(block_dim.x * block_idx.x + thread_idx.x)
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
     # FILL IN (6 lines at most)
 
 
@@ -87,25 +88,23 @@ fn simple_warp_dot_product[
 
 
 # ANCHOR: functional_warp_approach
-fn functional_warp_dot_product[
-    layout: Layout,
-    out_layout: Layout,
+def functional_warp_dot_product[
     dtype: DType,
     simd_width: Int,
     rank: Int,
     size: Int,
 ](
-    output: LayoutTensor[mut=True, dtype, out_layout, MutAnyOrigin],
-    a: LayoutTensor[mut=False, dtype, layout, MutAnyOrigin],
-    b: LayoutTensor[mut=False, dtype, layout, MutAnyOrigin],
+    output: TileTensor[mut=True, dtype, OutLayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, InLayoutType, MutAnyOrigin],
+    b: TileTensor[mut=False, dtype, InLayoutType, MutAnyOrigin],
     ctx: DeviceContext,
 ) raises:
     @parameter
     @always_inline
-    fn compute_dot_product[
+    def compute_dot_product[
         simd_width: Int, rank: Int, alignment: Int = align_of[dtype]()
     ](indices: IndexList[rank]) capturing -> None:
-        idx = indices[0]
+        var idx = indices[0]
         print("idx:", idx)
         # FILL IN (10 lines at most)
 
@@ -116,7 +115,7 @@ fn functional_warp_dot_product[
 # ANCHOR_END: functional_warp_approach
 
 
-fn expected_output[
+def expected_output[
     dtype: DType, n_warps: Int
 ](
     expected: HostBuffer[dtype],
@@ -125,7 +124,7 @@ fn expected_output[
 ) raises:
     with a.map_to_host() as a_host, b.map_to_host() as b_host:
         for i_warp in range(n_warps):
-            i_warp_in_buff = WARP_SIZE * i_warp
+            var i_warp_in_buff = WARP_SIZE * i_warp
             var warp_sum: Scalar[dtype] = 0
             for i in range(WARP_SIZE):
                 warp_sum += (
@@ -134,15 +133,17 @@ fn expected_output[
             expected[i_warp] = warp_sum
 
 
-fn rand_int[
+def rand_int[
     dtype: DType, size: Int
 ](buff: DeviceBuffer[dtype], min: Int = 0, max: Int = 100) raises:
     with buff.map_to_host() as buff_host:
         for i in range(size):
-            buff_host[i] = Int(random_float64(min, max))
+            buff_host[i] = Scalar[dtype](
+                Int(random_float64(Float64(min), Float64(max)))
+            )
 
 
-fn check_result[
+def check_result[
     dtype: DType, size: Int, print_result: Bool = False
 ](actual: DeviceBuffer[dtype], expected: HostBuffer[dtype]) raises:
     with actual.map_to_host() as actual_host:
@@ -156,40 +157,44 @@ fn check_result[
 
 @parameter
 @always_inline
-fn benchmark_simple_warp_parameterized[
+def benchmark_simple_warp_parameterized[
     test_size: Int
 ](mut bencher: Bencher) raises:
     comptime n_warps = test_size // WARP_SIZE
-    comptime in_layout = Layout.row_major(test_size)
-    comptime out_layout = Layout.row_major(n_warps)
+    comptime bench_in_layout = row_major[test_size]()
+    comptime BenchInLayoutType = type_of(bench_in_layout)
+    comptime bench_out_layout = row_major[n_warps]()
+    comptime BenchOutLayoutType = type_of(bench_out_layout)
     comptime n_threads = WARP_SIZE
     comptime n_blocks = (ceildiv(test_size, n_threads), 1)
 
-    bench_ctx = DeviceContext()
+    var bench_ctx = DeviceContext()
 
-    out = bench_ctx.enqueue_create_buffer[dtype](n_warps)
+    var out = bench_ctx.enqueue_create_buffer[dtype](n_warps)
     out.enqueue_fill(0)
-    a = bench_ctx.enqueue_create_buffer[dtype](test_size)
+    var a = bench_ctx.enqueue_create_buffer[dtype](test_size)
     a.enqueue_fill(0)
-    b = bench_ctx.enqueue_create_buffer[dtype](test_size)
+    var b = bench_ctx.enqueue_create_buffer[dtype](test_size)
     b.enqueue_fill(0)
-    expected = bench_ctx.enqueue_create_host_buffer[dtype](n_warps)
+    var expected = bench_ctx.enqueue_create_host_buffer[dtype](n_warps)
     expected.enqueue_fill(0)
 
     rand_int[dtype, test_size](a)
     rand_int[dtype, test_size](b)
     expected_output[dtype, n_warps](expected, a, b)
 
-    a_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](a)
-    b_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](b)
-    out_tensor = LayoutTensor[dtype, out_layout, MutAnyOrigin](out)
+    var a_tensor = TileTensor[
+        mut=False, dtype, BenchInLayoutType, ImmutAnyOrigin
+    ](a, bench_in_layout)
+    var b_tensor = TileTensor[
+        mut=False, dtype, BenchInLayoutType, ImmutAnyOrigin
+    ](b, bench_in_layout)
+    var out_tensor = TileTensor(out, bench_out_layout)
 
     @parameter
     @always_inline
-    fn traditional_workflow(ctx: DeviceContext) raises:
-        comptime kernel = simple_warp_dot_product[
-            in_layout, out_layout, test_size
-        ]
+    def traditional_workflow(ctx: DeviceContext) raises:
+        comptime kernel = simple_warp_dot_product[test_size]
         ctx.enqueue_function[kernel, kernel](
             out_tensor,
             a_tensor,
@@ -208,38 +213,44 @@ fn benchmark_simple_warp_parameterized[
 
 @parameter
 @always_inline
-fn benchmark_functional_warp_parameterized[
+def benchmark_functional_warp_parameterized[
     test_size: Int
 ](mut bencher: Bencher) raises:
     comptime n_warps = test_size // WARP_SIZE
-    comptime in_layout = Layout.row_major(test_size)
-    comptime out_layout = Layout.row_major(n_warps)
+    comptime bench_in_layout = row_major[test_size]()
+    comptime BenchInLayoutType = type_of(bench_in_layout)
+    comptime bench_out_layout = row_major[n_warps]()
+    comptime BenchOutLayoutType = type_of(bench_out_layout)
 
-    bench_ctx = DeviceContext()
+    var bench_ctx = DeviceContext()
 
-    out = bench_ctx.enqueue_create_buffer[dtype](n_warps)
+    var out = bench_ctx.enqueue_create_buffer[dtype](n_warps)
     out.enqueue_fill(0)
-    a = bench_ctx.enqueue_create_buffer[dtype](test_size)
+    var a = bench_ctx.enqueue_create_buffer[dtype](test_size)
     a.enqueue_fill(0)
-    b = bench_ctx.enqueue_create_buffer[dtype](test_size)
+    var b = bench_ctx.enqueue_create_buffer[dtype](test_size)
     b.enqueue_fill(0)
-    expected = bench_ctx.enqueue_create_host_buffer[dtype](n_warps)
+    var expected = bench_ctx.enqueue_create_host_buffer[dtype](n_warps)
     expected.enqueue_fill(0)
 
     rand_int[dtype, test_size](a)
     rand_int[dtype, test_size](b)
     expected_output[dtype, n_warps](expected, a, b)
 
-    a_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](a)
-    b_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](b)
-    out_tensor = LayoutTensor[dtype, out_layout, MutAnyOrigin](out)
+    var a_tensor = TileTensor[
+        mut=False, dtype, BenchInLayoutType, ImmutAnyOrigin
+    ](a, bench_in_layout)
+    var b_tensor = TileTensor[
+        mut=False, dtype, BenchInLayoutType, ImmutAnyOrigin
+    ](b, bench_in_layout)
+    var out_tensor = TileTensor(out, bench_out_layout)
 
     @parameter
     @always_inline
-    fn functional_warp_workflow(ctx: DeviceContext) raises:
-        functional_warp_dot_product[
-            in_layout, out_layout, dtype, SIMD_WIDTH, 1, test_size
-        ](out_tensor, a_tensor, b_tensor, ctx)
+    def functional_warp_workflow(ctx: DeviceContext) raises:
+        functional_warp_dot_product[dtype, SIMD_WIDTH, 1, test_size](
+            out_tensor, a_tensor, b_tensor, ctx
+        )
 
     bencher.iter_custom[functional_warp_workflow](bench_ctx)
     check_result[dtype, n_warps](out, expected)
@@ -251,39 +262,45 @@ fn benchmark_functional_warp_parameterized[
 
 @parameter
 @always_inline
-fn benchmark_traditional_parameterized[
+def benchmark_traditional_parameterized[
     test_size: Int
 ](mut bencher: Bencher) raises:
     comptime n_warps = test_size // WARP_SIZE
-    comptime in_layout = Layout.row_major(test_size)
-    comptime out_layout = Layout.row_major(n_warps)
+    comptime bench_in_layout = row_major[test_size]()
+    comptime BenchInLayoutType = type_of(bench_in_layout)
+    comptime bench_out_layout = row_major[n_warps]()
+    comptime BenchOutLayoutType = type_of(bench_out_layout)
     comptime n_blocks = (ceildiv(test_size, WARP_SIZE), 1)
 
-    bench_ctx = DeviceContext()
+    var bench_ctx = DeviceContext()
 
-    out = bench_ctx.enqueue_create_buffer[dtype](n_warps)
+    var out = bench_ctx.enqueue_create_buffer[dtype](n_warps)
     out.enqueue_fill(0)
-    a = bench_ctx.enqueue_create_buffer[dtype](test_size)
+    var a = bench_ctx.enqueue_create_buffer[dtype](test_size)
     a.enqueue_fill(0)
-    b = bench_ctx.enqueue_create_buffer[dtype](test_size)
+    var b = bench_ctx.enqueue_create_buffer[dtype](test_size)
     b.enqueue_fill(0)
-    expected = bench_ctx.enqueue_create_host_buffer[dtype](n_warps)
+    var expected = bench_ctx.enqueue_create_host_buffer[dtype](n_warps)
     expected.enqueue_fill(0)
 
     rand_int[dtype, test_size](a)
     rand_int[dtype, test_size](b)
     expected_output[dtype, n_warps](expected, a, b)
 
-    a_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](a)
-    b_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](b)
-    out_tensor = LayoutTensor[dtype, out_layout, MutAnyOrigin](out)
+    var a_tensor = TileTensor[
+        mut=False, dtype, BenchInLayoutType, ImmutAnyOrigin
+    ](a, bench_in_layout)
+    var b_tensor = TileTensor[
+        mut=False, dtype, BenchInLayoutType, ImmutAnyOrigin
+    ](b, bench_in_layout)
+    var out_tensor = TileTensor(out, bench_out_layout)
 
     @parameter
     @always_inline
-    fn traditional_workflow(ctx: DeviceContext) raises:
+    def traditional_workflow(ctx: DeviceContext) raises:
         ctx.enqueue_function[
-            traditional_dot_product_p12_style[in_layout, out_layout, test_size],
-            traditional_dot_product_p12_style[in_layout, out_layout, test_size],
+            traditional_dot_product_p12_style[test_size],
+            traditional_dot_product_p12_style[test_size],
         ](
             out_tensor,
             a_tensor,
@@ -300,39 +317,39 @@ fn benchmark_traditional_parameterized[
     bench_ctx.synchronize()
 
 
-def main():
+def main() raises:
     if argv()[1] != "--benchmark":
         print("SIZE:", SIZE)
         print("WARP_SIZE:", WARP_SIZE)
         print("SIMD_WIDTH:", SIMD_WIDTH)
         comptime n_warps = SIZE // WARP_SIZE
         with DeviceContext() as ctx:
-            out = ctx.enqueue_create_buffer[dtype](n_warps)
+            var out = ctx.enqueue_create_buffer[dtype](n_warps)
             out.enqueue_fill(0)
-            a = ctx.enqueue_create_buffer[dtype](SIZE)
+            var a = ctx.enqueue_create_buffer[dtype](SIZE)
             a.enqueue_fill(0)
-            b = ctx.enqueue_create_buffer[dtype](SIZE)
+            var b = ctx.enqueue_create_buffer[dtype](SIZE)
             b.enqueue_fill(0)
-            expected = ctx.enqueue_create_host_buffer[dtype](n_warps)
+            var expected = ctx.enqueue_create_host_buffer[dtype](n_warps)
             expected.enqueue_fill(0)
 
-            out_tensor = LayoutTensor[dtype, out_layout, MutAnyOrigin](out)
-            a_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](a)
-            b_tensor = LayoutTensor[dtype, in_layout, ImmutAnyOrigin](b)
+            var out_tensor = TileTensor(out, out_layout)
+            var a_tensor = TileTensor[
+                mut=False, dtype, InLayoutType, ImmutAnyOrigin
+            ](a, in_layout)
+            var b_tensor = TileTensor[
+                mut=False, dtype, InLayoutType, ImmutAnyOrigin
+            ](b, in_layout)
 
             with a.map_to_host() as a_host, b.map_to_host() as b_host:
                 for i in range(SIZE):
-                    a_host[i] = i
-                    b_host[i] = i
+                    a_host[i] = Scalar[dtype](i)
+                    b_host[i] = Scalar[dtype](i)
 
             if argv()[1] == "--traditional":
                 ctx.enqueue_function[
-                    traditional_dot_product_p12_style[
-                        in_layout, out_layout, SIZE
-                    ],
-                    traditional_dot_product_p12_style[
-                        in_layout, out_layout, SIZE
-                    ],
+                    traditional_dot_product_p12_style[SIZE],
+                    traditional_dot_product_p12_style[SIZE],
                 ](
                     out_tensor,
                     a_tensor,
@@ -342,8 +359,8 @@ def main():
                 )
             elif argv()[1] == "--kernel":
                 ctx.enqueue_function[
-                    simple_warp_dot_product[in_layout, out_layout, SIZE],
-                    simple_warp_dot_product[in_layout, out_layout, SIZE],
+                    simple_warp_dot_product[SIZE],
+                    simple_warp_dot_product[SIZE],
                 ](
                     out_tensor,
                     a_tensor,
@@ -352,16 +369,17 @@ def main():
                     block_dim=THREADS_PER_BLOCK,
                 )
             elif argv()[1] == "--functional":
-                functional_warp_dot_product[
-                    in_layout, out_layout, dtype, SIMD_WIDTH, 1, SIZE
-                ](out_tensor, a_tensor, b_tensor, ctx)
+                functional_warp_dot_product[dtype, SIMD_WIDTH, 1, SIZE](
+                    out_tensor, a_tensor, b_tensor, ctx
+                )
             expected_output[dtype, n_warps](expected, a, b)
             check_result[dtype, n_warps, True](out, expected)
+            print("Puzzle 24 complete ✅")
             ctx.synchronize()
     elif argv()[1] == "--benchmark":
         print("-" * 80)
-        bench_config = BenchConfig(max_iters=10, num_warmup_iters=1)
-        bench = Bench(bench_config.copy())
+        var bench_config = BenchConfig(max_iters=10, num_warmup_iters=1)
+        var bench = Bench(bench_config.copy())
 
         print("Testing SIZE=1 x WARP_SIZE, BLOCKS=1")
         bench.bench_function[benchmark_traditional_parameterized[WARP_SIZE]](

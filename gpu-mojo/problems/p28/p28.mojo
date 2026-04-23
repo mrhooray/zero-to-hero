@@ -1,10 +1,12 @@
-from gpu import thread_idx, block_idx, block_dim, grid_dim, barrier
-from gpu.host import DeviceContext
-from gpu.memory import AddressSpace, async_copy_wait_all
-from layout import Layout, LayoutTensor
+from std.gpu import thread_idx, block_idx, block_dim, grid_dim, barrier
+from std.gpu.host import DeviceContext
+from std.gpu.memory import AddressSpace, async_copy_wait_all
+from layout import TileTensor
+from layout.tile_layout import row_major
+from layout.tile_tensor import stack_allocation
 from layout.layout_tensor import copy_dram_to_sram_async
-from sys import argv, info
-from testing import assert_equal, assert_almost_equal
+from std.sys import argv, info
+from std.testing import assert_equal, assert_almost_equal
 
 # ANCHOR: async_copy_overlap_convolution
 comptime VECTOR_SIZE = 16384
@@ -17,15 +19,18 @@ comptime BLOCKS_PER_GRID_ASYNC = (
 ) // CONV_TILE_SIZE
 comptime THREADS_PER_BLOCK_ASYNC = 256
 comptime dtype = DType.float32
-comptime layout_async = Layout.row_major(VECTOR_SIZE)
+comptime layout_async = row_major[VECTOR_SIZE]()
+comptime LayoutAsyncType = type_of(layout_async)
+comptime kernel_layout = row_major[KERNEL_SIZE]()
+comptime KernelLayoutType = type_of(kernel_layout)
 
 
-fn async_copy_overlap_convolution[
-    dtype: DType, layout: Layout
+def async_copy_overlap_convolution[
+    dtype: DType
 ](
-    output: LayoutTensor[dtype, layout, MutAnyOrigin],
-    input: LayoutTensor[dtype, layout, ImmutAnyOrigin],
-    kernel: LayoutTensor[dtype, Layout.row_major(KERNEL_SIZE), ImmutAnyOrigin],
+    output: TileTensor[mut=True, dtype, LayoutAsyncType, MutAnyOrigin],
+    input: TileTensor[mut=False, dtype, LayoutAsyncType, ImmutAnyOrigin],
+    kernel: TileTensor[mut=False, dtype, KernelLayoutType, ImmutAnyOrigin],
 ):
     """Demonstrates async copy operations building on p14 patterns.
 
@@ -34,18 +39,12 @@ fn async_copy_overlap_convolution[
     """
 
     # Shared memory buffers (like p14, but without .fill(0) to avoid race)
-    input_shared = LayoutTensor[
-        dtype,
-        Layout.row_major(CONV_TILE_SIZE),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
-    kernel_shared = LayoutTensor[
-        dtype,
-        Layout.row_major(KERNEL_SIZE),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
+    var input_shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[CONV_TILE_SIZE]())
+    var kernel_shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[KERNEL_SIZE]())
 
     # FILL IN HERE (roughly 19 lines)
 
@@ -53,37 +52,35 @@ fn async_copy_overlap_convolution[
 # ANCHOR_END: async_copy_overlap_convolution
 
 
-def test_async_copy_overlap_convolution():
+def test_async_copy_overlap_convolution() raises:
     """Test async copy overlap with 1D convolution."""
     with DeviceContext() as ctx:
-        input_buf = ctx.enqueue_create_buffer[dtype](VECTOR_SIZE)
+        var input_buf = ctx.enqueue_create_buffer[dtype](VECTOR_SIZE)
         input_buf.enqueue_fill(0)
-        output_buf = ctx.enqueue_create_buffer[dtype](VECTOR_SIZE)
+        var output_buf = ctx.enqueue_create_buffer[dtype](VECTOR_SIZE)
         output_buf.enqueue_fill(0)
-        kernel_buf = ctx.enqueue_create_buffer[dtype](KERNEL_SIZE)
+        var kernel_buf = ctx.enqueue_create_buffer[dtype](KERNEL_SIZE)
         kernel_buf.enqueue_fill(0)
 
         # Create test data: consecutive integers [1, 2, 3, ..., VECTOR_SIZE]
         with input_buf.map_to_host() as input_host:
             for i in range(VECTOR_SIZE):
-                input_host[i] = Float32(i + 1)
+                input_host[i] = Scalar[dtype](i + 1)
 
         # Create test kernel: [1, 2, 3, 4, 5]
         with kernel_buf.map_to_host() as kernel_host:
             for i in range(KERNEL_SIZE):
-                kernel_host[i] = Float32(i + 1)
+                kernel_host[i] = Scalar[dtype](i + 1)
 
-        input_tensor = LayoutTensor[dtype, layout_async, ImmutAnyOrigin](
-            input_buf
+        var input_tensor = TileTensor[
+            mut=False, dtype, LayoutAsyncType, ImmutAnyOrigin
+        ](input_buf, layout_async)
+        var output_tensor = TileTensor(output_buf, layout_async)
+        var kernel_tensor = TileTensor[mut=False, dtype, KernelLayoutType](
+            kernel_buf, kernel_layout
         )
-        output_tensor = LayoutTensor[dtype, layout_async, MutAnyOrigin](
-            output_buf
-        )
-        kernel_tensor = LayoutTensor[
-            mut=False, dtype, Layout.row_major(KERNEL_SIZE)
-        ](kernel_buf)
 
-        comptime kernel = async_copy_overlap_convolution[dtype, layout_async]
+        comptime kernel = async_copy_overlap_convolution[dtype]
         ctx.enqueue_function[kernel, kernel](
             output_tensor,
             input_tensor,
@@ -116,12 +113,14 @@ def test_async_copy_overlap_convolution():
                         for k in range(KERNEL_SIZE):
                             var input_idx = i + k - HALO_SIZE
                             if input_idx >= 0 and input_idx < VECTOR_SIZE:
-                                expected_val += input_host[input_idx] * (k + 1)
+                                expected_val += input_host[input_idx] * Scalar[
+                                    dtype
+                                ](k + 1)
                     else:
                         # Boundary elements: copy input
                         expected_val = input_host[i]
 
-                    actual = output_host[i]
+                    var actual = output_host[i]
                     print(
                         "  Index",
                         i,
@@ -139,12 +138,12 @@ def test_async_copy_overlap_convolution():
                         break
 
                 if success:
-                    print("Async copy overlap convolution test PASSED!")
+                    print("Puzzle 28 complete ✅")
                 else:
                     print("Async copy overlap convolution test FAILED!")
 
 
-def main():
+def main() raises:
     """Run memory fence tests based on command line arguments."""
     if len(argv()) != 1:
         print("Usage: p25.mojo")
