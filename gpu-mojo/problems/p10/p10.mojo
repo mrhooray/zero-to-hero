@@ -1,9 +1,11 @@
-from gpu import thread_idx, block_dim, block_idx, barrier
-from gpu.host import DeviceContext
-from gpu.memory import AddressSpace
-from layout import Layout, LayoutTensor
-from testing import assert_equal
-from sys import argv
+from std.gpu import thread_idx, block_dim, block_idx, barrier
+from std.gpu.host import DeviceContext
+from std.gpu.memory import AddressSpace
+from layout import TileTensor
+from layout.tile_layout import row_major
+from layout.tile_tensor import stack_allocation
+from std.testing import assert_equal
+from std.sys import argv
 
 # ANCHOR: shared_memory_race
 
@@ -11,26 +13,24 @@ comptime SIZE = 2
 comptime BLOCKS_PER_GRID = 1
 comptime THREADS_PER_BLOCK = (3, 3)
 comptime dtype = DType.float32
-comptime layout = Layout.row_major(SIZE, SIZE)
+comptime layout = row_major[SIZE, SIZE]()
+comptime LayoutType = type_of(layout)
 
 
-fn shared_memory_race(
-    output: LayoutTensor[dtype, layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, layout, ImmutAnyOrigin],
-    size: UInt,
+def shared_memory_race(
+    output: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
+    size: Int,
 ):
-    row = thread_idx.y
-    col = thread_idx.x
+    var row = thread_idx.y
+    var col = thread_idx.x
 
-    shared_sum = LayoutTensor[
-        dtype,
-        Layout.row_major(1),
-        MutAnyOrigin,
-        address_space = AddressSpace.SHARED,
-    ].stack_allocation()
+    var shared_sum = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[1]())
 
     if row == 0 and col == 0:
-        sum = Scalar[dtype](0)
+        var sum = Scalar[dtype](0)
         for r in range(SIZE):
             for c in range(SIZE):
                 sum += rebind[Scalar[dtype]](a[r, c])
@@ -46,13 +46,13 @@ fn shared_memory_race(
 
 
 # ANCHOR: add_10_2d_no_guard
-fn add_10_2d(
-    output: LayoutTensor[dtype, layout, MutAnyOrigin],
-    a: LayoutTensor[dtype, layout, ImmutAnyOrigin],
-    size: UInt,
+def add_10_2d(
+    output: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
+    a: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
+    size: Int,
 ):
-    row = thread_idx.y
-    col = thread_idx.x
+    var row = thread_idx.y
+    var col = thread_idx.x
     if row < size and col < size:
         output[row, col] = a[row, col] + 10.0
 
@@ -60,7 +60,7 @@ fn add_10_2d(
 # ANCHOR_END: add_10_2d_no_guard
 
 
-def main():
+def main() raises:
     if len(argv()) != 2:
         print(
             "Expected one command-line argument: '--memory-bug' or"
@@ -68,38 +68,34 @@ def main():
         )
         return
 
-    flag = argv()[1]
+    var flag = argv()[1]
 
     with DeviceContext() as ctx:
-        out_buf = ctx.enqueue_create_buffer[dtype](SIZE * SIZE)
+        var out_buf = ctx.enqueue_create_buffer[dtype](SIZE * SIZE)
         out_buf.enqueue_fill(0)
-        out_tensor = LayoutTensor[dtype, layout, MutAnyOrigin](out_buf).reshape[
-            layout
-        ]()
-        print("out shape:", out_tensor.shape[0](), "x", out_tensor.shape[1]())
-        expected = ctx.enqueue_create_host_buffer[dtype](SIZE * SIZE)
+        var out_tensor = TileTensor(out_buf, layout)
+        print("out shape:", out_tensor.dim[0](), "x", out_tensor.dim[1]())
+        var expected = ctx.enqueue_create_host_buffer[dtype](SIZE * SIZE)
         expected.enqueue_fill(0)
 
-        a = ctx.enqueue_create_buffer[dtype](SIZE * SIZE)
+        var a = ctx.enqueue_create_buffer[dtype](SIZE * SIZE)
         a.enqueue_fill(0)
         with a.map_to_host() as a_host:
             for i in range(SIZE * SIZE):
-                a_host[i] = i
+                a_host[i] = Scalar[dtype](i)
 
-        a_tensor = LayoutTensor[dtype, layout, ImmutAnyOrigin](a).reshape[
-            layout
-        ]()
+        var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
 
         if flag == "--memory-bug":
             print("Running memory bug example (bounds checking issue)...")
             # Fill expected values directly since it's a HostBuffer
             for i in range(SIZE * SIZE):
-                expected[i] = i + 10
+                expected[i] = Scalar[dtype](i + 10)
 
             ctx.enqueue_function[add_10_2d, add_10_2d](
                 out_tensor,
                 a_tensor,
-                UInt(SIZE),
+                SIZE,
                 grid_dim=BLOCKS_PER_GRID,
                 block_dim=THREADS_PER_BLOCK,
             )
@@ -111,14 +107,12 @@ def main():
                 print("expected:", expected)
                 for i in range(SIZE * SIZE):
                     assert_equal(out_buf_host[i], expected[i])
-                print(
-                    "✅ Memory test PASSED! (memcheck may find bounds"
-                    " violations)"
-                )
+                print("Memory bug test: passed")
+                print("Puzzle 10 complete ✅")
 
         elif flag == "--race-condition":
             print("Running race condition example...")
-            total_sum = Scalar[dtype](0.0)
+            var total_sum = Scalar[dtype](0.0)
             with a.map_to_host() as a_host:
                 for i in range(SIZE * SIZE):
                     total_sum += a_host[i]  # Sum: 0 + 1 + 2 + 3 = 6
@@ -130,7 +124,7 @@ def main():
             ctx.enqueue_function[shared_memory_race, shared_memory_race](
                 out_tensor,
                 a_tensor,
-                UInt(SIZE),
+                SIZE,
                 grid_dim=BLOCKS_PER_GRID,
                 block_dim=THREADS_PER_BLOCK,
             )
@@ -143,10 +137,8 @@ def main():
                 for i in range(SIZE * SIZE):
                     assert_equal(out_buf_host[i], expected[i])
 
-                print(
-                    "✅ Race condition test PASSED! (racecheck will find"
-                    " hazards)"
-                )
+                print("Race condition test: passed")
+                print("Puzzle 10 complete ✅")
 
         else:
             print("Unknown flag:", flag)
