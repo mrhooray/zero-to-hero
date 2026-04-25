@@ -29,7 +29,25 @@ def axis_sum(
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var local_i = thread_idx.x
     var batch = block_idx.y
-    # FILL ME IN (roughly 15 lines)
+    var shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[TPB]())
+
+    if global_i < size:
+        shared[local_i] = a[batch, global_i]
+    else:
+        shared[local_i] = 0
+    barrier()
+
+    var stride = TPB // 2
+    while stride > 0:
+        if local_i < stride:
+            shared[local_i] += shared[local_i + stride]
+        barrier()
+        stride //= 2
+
+    if local_i == 0:
+        output[batch, 0] = shared[0]
 
 
 # ANCHOR_END: axis_sum
