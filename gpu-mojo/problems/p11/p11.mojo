@@ -34,7 +34,7 @@ def pooling(
     barrier()
 
     var sum = Scalar[dtype](0)
-    for i in range(3):
+    comptime for i in range(3):
         var p = Int(local_i) - i
         if p >= 0:
             sum += shared[p]
