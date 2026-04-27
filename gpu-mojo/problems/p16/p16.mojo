@@ -4,10 +4,11 @@ from std.gpu.host import DeviceContext
 
 # ANCHOR: naive_matmul
 from std.gpu import thread_idx, block_idx, block_dim, barrier
-from std.gpu.memory import AddressSpace
-from layout import TileTensor
+from std.gpu.memory import AddressSpace, async_copy_wait_all
+from layout import TileTensor, Layout
 from layout.tile_layout import row_major
 from layout.tile_tensor import stack_allocation
+from layout.layout_tensor import copy_dram_to_sram_async
 
 
 comptime TPB = 3
@@ -90,27 +91,53 @@ def matmul_tiled(
         dtype=dtype, address_space=AddressSpace.SHARED
     ](row_major[TPB, TPB]())
 
+    # manual tiling
+    # var acc: output.ElementType = 0
+    # comptime for tile in range((SIZE_TILED + TPB - 1) // TPB):
+    #     if tiled_row < SIZE_TILED and (tile * TPB + local_col) < SIZE_TILED:
+    #         shared_a[local_row, local_col] = a[
+    #             tiled_row, tile * TPB + local_col
+    #         ]
+    #     if tiled_col < SIZE_TILED and (tile * TPB + local_row) < SIZE_TILED:
+    #         shared_b[local_row, local_col] = b[
+    #             tile * TPB + local_row, tiled_col
+    #         ]
+
+    #     barrier()
+
+    #     if tiled_row < SIZE_TILED and tiled_col < SIZE_TILED:
+    #         comptime for i in range(min(TPB, SIZE_TILED - tile * TPB)):
+    #             acc += shared_a[local_row, i] * shared_b[i, local_col]
+
+    #     barrier()
+
+    # if tiled_row < SIZE_TILED and tiled_col < SIZE_TILED:
+    #     output[tiled_row, tiled_col] = acc
+
+    # more idiomatic tiling
+    # requires perfect tiling
+    # with padding or handle edge tiles seperately
     var acc: output.ElementType = 0
-    comptime for tile in range((SIZE_TILED + TPB - 1) // TPB):
-        if tiled_row < SIZE_TILED and (tile * TPB + local_col) < SIZE_TILED:
-            shared_a[local_row, local_col] = a[
-                tiled_row, tile * TPB + local_col
-            ]
-        if tiled_col < SIZE_TILED and (tile * TPB + local_row) < SIZE_TILED:
-            shared_b[local_row, local_col] = b[
-                tile * TPB + local_row, tiled_col
-            ]
+    comptime for tile in range(SIZE_TILED // TPB):
+        tiled_a = a.tile[TPB, TPB](block_idx.y, tile)
+        tiled_b = b.tile[TPB, TPB](tile, block_idx.x)
 
+        comptime load_layout = Layout.row_major(1, TPB)
+        copy_dram_to_sram_async[
+            thread_layout=load_layout, num_threads=TPB * TPB, block_dim_count=2
+        ](shared_a.to_layout_tensor(), tiled_a.to_layout_tensor())
+        copy_dram_to_sram_async[
+            thread_layout=load_layout, num_threads=TPB * TPB, block_dim_count=2
+        ](shared_b.to_layout_tensor(), tiled_b.to_layout_tensor())
+        async_copy_wait_all()
         barrier()
 
-        if tiled_row < SIZE_TILED and tiled_col < SIZE_TILED:
-            comptime for i in range(min(TPB, SIZE_TILED - tile * TPB)):
-                acc += shared_a[local_row, i] * shared_b[i, local_col]
-
+        comptime for i in range(TPB):
+            acc += shared_a[local_row, i] * shared_b[i, local_col]
         barrier()
 
-    if tiled_row < SIZE_TILED and tiled_col < SIZE_TILED:
-        output[tiled_row, tiled_col] = acc
+    tiled_output = output.tile[TPB, TPB](block_idx.y, block_idx.x)
+    tiled_output[local_row, local_col] = acc
 
 
 # ANCHOR_END: matmul_tiled
