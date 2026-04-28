@@ -30,8 +30,49 @@ def softmax_gpu_kernel[
     comptime assert (
         dtype.is_floating_point()
     ), "dtype must be a floating-point type"
-    # FILL IN (roughly 31 lines)
-    ...
+
+    var global_i = block_dim.x * block_idx.x + thread_idx.x
+    var local_i = thread_idx.x
+    var shared_max = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK_DIM_X]())
+    var shared_sum = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[BLOCK_DIM_X]())
+
+    var val = min_finite[dtype]()
+    if global_i < input_size:
+        val = input[global_i]
+    shared_max[local_i] = val
+    barrier()
+
+    var stride = BLOCK_DIM_X // 2
+    while stride > 0:
+        if local_i < stride:
+            shared_max[local_i] = max(
+                shared_max[local_i], shared_max[local_i + stride]
+            )
+        barrier()
+        stride = stride // 2
+    var block_max = shared_max[0]
+
+    var exp_val: Scalar[dtype] = 0.0
+    if global_i < input_size:
+        exp_val = exp(val - block_max)
+    shared_sum[local_i] = exp_val
+    barrier()
+
+    stride = BLOCK_DIM_X // 2
+    while stride > 0:
+        if local_i < stride:
+            shared_sum[local_i] += shared_sum[local_i + stride]
+        barrier()
+        stride = stride // 2
+
+    var block_sum = shared_sum[0]
+
+    if global_i < input_size:
+        output[global_i] = exp_val / block_sum
 
 
 # ANCHOR_END: softmax_gpu_kernel
@@ -48,8 +89,17 @@ def softmax_cpu_kernel[
     comptime assert (
         dtype.is_floating_point()
     ), "dtype must be a floating-point type"
-    # FILL IN (roughly 10 lines)
-    ...
+    var max_val = min_finite[dtype]()
+    for i in range(input_size):
+        max_val = max(max_val, input[i])
+
+    var sum_val: Scalar[dtype] = 0
+    for i in range(input_size):
+        output[i] += exp(input[i] - max_val)
+        sum_val += output[i]
+
+    for i in range(input_size):
+        output[i] /= sum_val
 
 
 # ANCHOR_END: softmax_cpu_kernel
