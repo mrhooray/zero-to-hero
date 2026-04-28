@@ -102,7 +102,22 @@ struct Conv1DCustomOp:
                 0,
             )
 
-            # FILL ME IN with 1 line calling our conv1d_kernel
+            comptime InLayout = type_of(row_major[input_size]())
+            comptime ConvLayout = type_of(row_major[conv_size]())
+            comptime kernel_fn = conv1d_kernel[
+                input_size,
+                conv_size,
+                InLayout,
+                InLayout,
+                ConvLayout,
+            ]
+            gpu_ctx.enqueue_function[kernel_fn, kernel_fn](
+                output_tensor,
+                input_tensor,
+                kernel_tensor,
+                grid_dim=BLOCKS_PER_GRID,
+                block_dim=(TPB, 1),
+            )
 
         elif target == "cpu":
             # we can fallback to CPU
