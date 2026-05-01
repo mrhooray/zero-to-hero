@@ -126,8 +126,27 @@ def transpose_kernel[
     output: TileTensor[mut=True, dtype, OutLayout, MutAnyOrigin],
     inp: TileTensor[mut=False, dtype, InLayout, ImmutAnyOrigin],
 ):
-    # FILL ME IN (roughly 18 lines)
-    ...
+    var local_row = thread_idx.y
+    var local_col = thread_idx.x
+    var in_row = block_idx.y * TRANSPOSE_BLOCK_DIM_XY + thread_idx.y
+    var in_col = block_idx.x * TRANSPOSE_BLOCK_DIM_XY + thread_idx.x
+
+    var shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[TRANSPOSE_BLOCK_DIM_XY, TRANSPOSE_BLOCK_DIM_XY]())
+    if in_row < rows and in_col < cols:
+        shared[local_row, local_col] = inp[in_row, in_col]
+    barrier()
+
+    # block swap
+    var out_row = block_idx.x * TRANSPOSE_BLOCK_DIM_XY + thread_idx.y
+    var out_col = block_idx.y * TRANSPOSE_BLOCK_DIM_XY + thread_idx.x
+
+    # local swap
+    if out_row < cols and out_col < rows:
+        # out_col vary by thread_idx.x
+        # this enables coalesced write
+        output[out_row, out_col] = shared[local_col, local_row]
 
 
 # ANCHOR_END: transpose_kernel
