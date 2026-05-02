@@ -1,5 +1,5 @@
-from typing import Optional
 from pathlib import Path
+
 import numpy as np
 
 # ANCHOR: conv1d_pytorch
@@ -25,7 +25,7 @@ def conv1d_pytorch(
 
     # Call our custom conv1d operation with explicit output tensor
     # The Mojo signature expects: (out, input, kernel)
-    conv1d = ops.conv1d[
+    _conv1d = ops.conv1d[
         {
             "input_size": input_tensor.shape[0],
             "conv_size": kernel_tensor.shape[0],
@@ -43,7 +43,7 @@ def conv1d_pytorch(
 def conv1d_max_graph_reference(
     input_array: np.ndarray,
     kernel_array: np.ndarray,
-    device: Optional[str] = None,
+    device: str | None = None,
 ) -> np.ndarray:
     """
     Reference implementation using MAX Graph (like p15) for comparison.
