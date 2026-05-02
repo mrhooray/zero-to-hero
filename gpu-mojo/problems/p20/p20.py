@@ -25,14 +25,14 @@ def conv1d_pytorch(
 
     # Call our custom conv1d operation with explicit output tensor
     # The Mojo signature expects: (out, input, kernel)
-    _conv1d = ops.conv1d[
+    conv1d = ops.conv1d[
         {
             "input_size": input_tensor.shape[0],
             "conv_size": kernel_tensor.shape[0],
         }
     ]
 
-    # FILL IN with 1 line of code
+    torch.compile(conv1d)(output_tensor, input_tensor, kernel_tensor)
 
     return output_tensor
 
@@ -176,9 +176,7 @@ if __name__ == "__main__":
         print("✅ MAX Graph verification PASSED")
 
         if pytorch_result_cpu is not None:
-            np.testing.assert_allclose(
-                pytorch_result_cpu, max_graph_result, rtol=1e-5
-            )
+            np.testing.assert_allclose(pytorch_result_cpu, max_graph_result, rtol=1e-5)
             print("✅ PyTorch and MAX Graph results MATCH")
 
     except Exception as e:
@@ -187,8 +185,6 @@ if __name__ == "__main__":
     print()
     print("Key Learning Points:")
     print("• Same Mojo kernel works for both MAX Graph and PyTorch")
-    print(
-        "• PyTorch CustomOpLibrary requires explicit output tensor allocation"
-    )
+    print("• PyTorch CustomOpLibrary requires explicit output tensor allocation")
     print("• Both approaches call the exact same optimized GPU kernel")
     print("• PyTorch tensors can stay on GPU throughout the computation")
