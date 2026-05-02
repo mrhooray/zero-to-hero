@@ -40,14 +40,24 @@ def embedding_kernel_coalesced[
     if global_idx >= total_elements:
         return
 
+    output_lt = output.to_layout_tensor()
+    indices_lt = indices.to_layout_tensor()
+    weights_lt = weights.to_layout_tensor()
+
     # Convert to (batch, seq, embed) coordinates
-    # FILL IN roughly 4 lines
+    batch_idx = global_idx // (seq_len * embed_dim)
+    residual = global_idx % (seq_len * embed_dim)
+    seq_idx = residual // embed_dim
+    embed_idx = residual % embed_dim
 
     # Get token index
-    # FILL IN 1 line
+    token_idx = indices_lt[batch_idx, seq_idx]
 
     # Simple, correct assignment
-    # FILL IN 4 lines
+    if token_idx >= 0 and token_idx < vocab_size:
+        output_lt[batch_idx, seq_idx, embed_idx] = weights_lt[
+            token_idx, embed_idx
+        ]
 
 
 # ANCHOR_END: embedding_kernel_coalesced
@@ -85,14 +95,23 @@ def embedding_kernel_2d[
     if batch_seq_idx >= total_positions or embed_idx >= embed_dim:
         return
 
+    output_lt = output.to_layout_tensor()
+    indices_lt = indices.to_layout_tensor()
+    weights_lt = weights.to_layout_tensor()
+
     # Convert to (batch, seq) coordinates
-    # FILL IN 2 lines
+    batch_idx = batch_seq_idx // seq_len
+    seq_idx = batch_seq_idx % seq_len
 
     # Get token index
     # FILL IN 1 line
+    token_idx = indices_lt[batch_idx, seq_idx]
 
     # Assignment with 2D grid pattern
-    # FILL IN 4 lines
+    if token_idx >= 0 and token_idx < vocab_size:
+        output_lt[batch_idx, seq_idx, embed_idx] = weights_lt[
+            token_idx, embed_idx
+        ]
 
 
 # ANCHOR_END: embedding_kernel_2d
