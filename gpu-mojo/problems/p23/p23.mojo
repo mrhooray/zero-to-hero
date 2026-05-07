@@ -79,7 +79,18 @@ def tiled_elementwise_add[
         var a_tile = a.tile[tile_size](tile_id)
         var b_tile = b.tile[tile_size](tile_id)
 
-        # FILL IN (6 lines at most)
+        var a_lt = a_tile.to_layout_tensor()
+        var b_lt = b_tile.to_layout_tensor()
+        var out_lt = output_tile.to_layout_tensor()
+        comptime for i in range(tile_size // simd_width):
+            var a_vec = a_lt.aligned_load[width=simd_width](
+                Index(i * simd_width)
+            )
+            var b_vec = b_lt.aligned_load[width=simd_width](
+                Index(i * simd_width)
+            )
+            var sum = a_vec + b_vec
+            out_lt.store[simd_width](Index(i * simd_width), sum)
 
     var num_tiles = (size + tile_size - 1) // tile_size
     elementwise[process_tiles, 1, target="gpu"](num_tiles, ctx)
