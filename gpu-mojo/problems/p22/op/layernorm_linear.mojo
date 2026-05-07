@@ -246,13 +246,41 @@ def minimal_fused_kernel[
     if batch_idx >= batch_size or seq_idx >= seq_len:
         return
 
-    # Step 1: Compute LayerNorm statistics once per sequence position
+    output_lt = output.to_layout_tensor()
+    input_lt = input.to_layout_tensor()
+    ln_weight_lt = ln_weight.to_layout_tensor()
+    ln_bias_lt = ln_bias.to_layout_tensor()
+    linear_weight_lt = linear_weight.to_layout_tensor()
+    linear_bias_lt = linear_bias.to_layout_tensor()
 
-    # FILL IN roughly 10 lines
+    # Step 1: Compute LayerNorm statistics once per sequence position
+    var sum: Scalar[dtype] = 0
+    var sq_sum: Scalar[dtype] = 0
+
+    comptime for hid_idx in range(hidden_dim):
+        var x = rebind[Scalar[dtype]](input_lt[batch_idx, seq_idx, hid_idx])
+        sum += x
+        sq_sum += x * x
+
+    var stat_mean = sum / hidden_dim
+    var stat_var = sq_sum / hidden_dim - stat_mean * stat_mean
+    var stat_std = sqrt(stat_var + 1e-8)
 
     # Step 2: Compute all outputs for this sequence position
+    comptime for out_idx in range(output_dim):
+        var acc: Scalar[dtype] = 0
+        comptime for hid_idx in range(hidden_dim):
+            var x = rebind[Scalar[dtype]](input_lt[batch_idx, seq_idx, hid_idx])
+            var norm_weight = rebind[Scalar[dtype]](ln_weight_lt[hid_idx])
+            var norm_bias = rebind[Scalar[dtype]](ln_bias_lt[hid_idx])
+            var norm_x = (x - stat_mean) / stat_std * norm_weight + norm_bias
+            var linear_weight = rebind[Scalar[dtype]](
+                linear_weight_lt[out_idx, hid_idx]
+            )
+            acc += norm_x * linear_weight
 
-    # FILL IN roughly 10 lines
+        var linear_bias = rebind[Scalar[dtype]](linear_bias_lt[out_idx])
+        output_lt[batch_idx, seq_idx, out_idx] = acc + linear_bias
 
 
 # ANCHOR_END: minimal_fused_forward_kernel
