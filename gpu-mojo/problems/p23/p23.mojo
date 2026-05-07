@@ -4,7 +4,7 @@ from std.gpu.host.compile import get_gpu_target
 from layout import TileTensor
 from layout.tile_layout import row_major, TensorLayout
 from layout.tile_tensor import stack_allocation
-from std.utils import IndexList
+from std.utils import Index, IndexList
 from std.math import log2
 from std.algorithm.functional import elementwise, vectorize
 from std.sys import simd_width_of, argv, align_of
@@ -34,8 +34,16 @@ def elementwise_add[
         simd_width: Int, rank: Int, alignment: Int = align_of[dtype]()
     ](indices: IndexList[rank]) capturing -> None:
         var idx = indices[0]
-        print("idx:", idx)
-        # FILL IN (2 to 4 lines)
+        # print("idx:", idx)
+
+        var a_lt = a.to_layout_tensor()
+        var b_lt = b.to_layout_tensor()
+        var out_lt = output.to_layout_tensor()
+
+        var a_simd = a_lt.aligned_load[width=simd_width](Index(idx))
+        var b_simd = b_lt.aligned_load[width=simd_width](Index(idx))
+        var sum = a_simd + b_simd
+        out_lt.store[simd_width](Index(idx), sum)
 
     elementwise[add, SIMD_WIDTH, target="gpu"](size, ctx)
 
