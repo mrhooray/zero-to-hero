@@ -186,8 +186,21 @@ def vectorize_within_tiles_elementwise_add[
             "actual_tile_size:",
             actual_tile_size,
         )
+        var a_lt = a.to_layout_tensor()
+        var b_lt = b.to_layout_tensor()
+        var out_lt = output.to_layout_tensor()
 
-        # FILL IN (9 lines at most)
+        def vec_add[
+            width: Int
+        ](i: Int) {read tile_start, read a_lt, read b_lt, mut out_lt}:
+            var idx = tile_start + i
+            if idx + width <= size:
+                var a_vec = a_lt.aligned_load[width=simd_width](Index(idx))
+                var b_vec = b_lt.aligned_load[width=simd_width](Index(idx))
+                var sum = a_vec + b_vec
+                out_lt.store[simd_width](Index(idx), sum)
+
+        vectorize[simd_width](actual_tile_size, vec_add)
 
     var num_tiles = (size + tile_size - 1) // tile_size
     elementwise[
