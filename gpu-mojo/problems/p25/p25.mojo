@@ -95,8 +95,20 @@ def broadcast_shuffle_coordination[
     var lane = Int(lane_id())
     if global_i < size:
         var scale_factor: output.ElementType = 0.0
+        var curr = input[global_i]
+        var next = shuffle_down(curr, 1)
+        var next2 = shuffle_down(curr, 2)
+        var next3 = shuffle_down(curr, 3)
 
-        # FILL IN (roughly 14 lines)
+        if lane == 0:
+            scale_factor = (curr + next + next2 + next3) / 4.0
+
+        scale_factor = broadcast(scale_factor)
+
+        if lane < WARP_SIZE - 1:
+            output[global_i] = (curr + next) * scale_factor
+        else:
+            output[global_i] = curr * scale_factor
 
 
 # ANCHOR_END: broadcast_shuffle_coordination
@@ -117,8 +129,16 @@ def basic_broadcast[
     var lane = Int(lane_id())
     if global_i < size:
         var broadcast_value: output.ElementType = 0.0
+        var curr = input[global_i]
+        var next1 = shuffle_down(curr, 1)
+        var next2 = shuffle_down(curr, 2)
+        var next3 = shuffle_down(curr, 3)
 
-        # FILL IN (roughly 10 lines)
+        if lane == 0:
+            broadcast_value = curr + next1 + next2 + next3
+
+        broadcast_value = broadcast(broadcast_value)
+        output[global_i] = curr + broadcast_value
 
 
 # ANCHOR_END: basic_broadcast
@@ -139,10 +159,18 @@ def conditional_broadcast[
     var lane = Int(lane_id())
     if global_i < size:
         var decision_value: output.ElementType = 0.0
-
-        # FILL IN (roughly 10 lines)
-
         var current_input = input[global_i]
+
+        if lane == 0:
+            decision_value = current_input
+
+        comptime for offset in range(1, 8):
+            var next = shuffle_down(current_input, UInt32(offset))
+            if lane == 0:
+                decision_value = max(decision_value, next)
+
+        decision_value = broadcast(decision_value)
+
         var threshold = decision_value / 2.0
         if current_input >= threshold:
             output[global_i] = current_input * 2.0  # Double if >= threshold
