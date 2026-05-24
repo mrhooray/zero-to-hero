@@ -29,7 +29,10 @@ def butterfly_pair_swap[
     """
     var global_i = block_dim.x * block_idx.x + thread_idx.x
 
-    # FILL ME IN (4 lines)
+    if global_i < size:
+        var curr = input[global_i]
+        var other = shuffle_xor(curr, 1)
+        output[global_i] = other
 
 
 # ANCHOR_END: butterfly_pair_swap
@@ -51,7 +54,14 @@ def butterfly_parallel_max[
     """
     var global_i = block_dim.x * block_idx.x + thread_idx.x
 
-    # FILL ME IN (roughly 7 lines)
+    if global_i < size:
+        var max_val = input[global_i]
+        var offset = UInt32(WARP_SIZE // 2)
+        while offset > 0:
+            other_val = shuffle_xor(max_val, offset)
+            max_val = max(max_val, other_val)
+            offset //= 2
+        output[global_i] = max_val
 
 
 # ANCHOR_END: butterfly_parallel_max
@@ -81,9 +91,21 @@ def butterfly_conditional_max[
 
     if global_i < size:
         var current_val = input[global_i]
+        var max_val = current_val
         var min_val = current_val
 
-        # FILL ME IN (roughly 11 lines)
+        var offset = UInt32(WARP_SIZE // 2)
+        while offset > 0:
+            var other_max = shuffle_xor(max_val, offset)
+            var other_min = shuffle_xor(min_val, offset)
+            max_val = max(max_val, other_max)
+            min_val = min(min_val, other_min)
+            offset //= 2
+
+        if lane % 2 == 0:
+            output[global_i] = max_val
+        else:
+            output[global_i] = min_val
 
 
 # ANCHOR_END: butterfly_conditional_max
