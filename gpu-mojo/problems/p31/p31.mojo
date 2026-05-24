@@ -206,7 +206,7 @@ def benchmark_minimal_parameterized[test_size: Int](mut b: Bencher) raises:
         var x_tensor = TileTensor[mut=False, dtype, LayoutType](x, layout)
 
         comptime kernel = minimal_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             y_tensor,
             x_tensor,
             ALPHA,
@@ -245,7 +245,7 @@ def benchmark_sophisticated_parameterized[
         var x_tensor = TileTensor[mut=False, dtype, LayoutType](x, layout)
 
         comptime kernel = sophisticated_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             y_tensor,
             x_tensor,
             ALPHA,
@@ -282,7 +282,7 @@ def benchmark_balanced_parameterized[test_size: Int](mut b: Bencher) raises:
         var x_tensor = TileTensor[mut=False, dtype, LayoutType](x, layout)
 
         comptime kernel = balanced_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             y_tensor,
             x_tensor,
             ALPHA,
@@ -317,7 +317,7 @@ def test_minimal() raises:
         var x_tensor = TileTensor[mut=False, dtype, LayoutType](x, layout)
 
         comptime kernel = minimal_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             y_tensor,
             x_tensor,
             ALPHA,
@@ -360,7 +360,7 @@ def test_sophisticated() raises:
         var x_tensor = TileTensor[mut=False, dtype, LayoutType](x, layout)
 
         comptime kernel = sophisticated_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             y_tensor,
             x_tensor,
             ALPHA,
@@ -404,7 +404,7 @@ def test_balanced() raises:
         var x_tensor = TileTensor[mut=False, dtype, LayoutType](x, layout)
 
         comptime kernel = balanced_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             y_tensor,
             x_tensor,
             ALPHA,

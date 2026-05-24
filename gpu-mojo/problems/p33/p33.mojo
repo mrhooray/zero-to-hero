@@ -1,11 +1,10 @@
 from std.gpu import thread_idx, block_idx, block_dim, barrier, WARP_SIZE
 from std.gpu.host import DeviceContext
-from std.gpu.memory import AddressSpace, async_copy_wait_all
-from layout import TileTensor
+from layout import Layout, LayoutTensor, TileTensor
 from layout.tile_layout import row_major
-from layout.tile_tensor import stack_allocation
 from layout.tensor_core import TensorCore
 from layout.layout_tensor import copy_dram_to_sram_async
+from std.gpu.memory import async_copy_wait_all, AddressSpace
 from std.utils import Index
 from std.sys import argv
 from std.testing import assert_equal, assert_almost_equal
@@ -24,13 +23,13 @@ comptime BLOCK_PER_GRID_TILED = (
 comptime THREADS_PER_BLOCK_TILED = (TILE_SIZE, TILE_SIZE)
 
 
-# ANCHOR: matmul_idiomatic_tiled_solution
+# ANCHOR: matmul_idiomatic_tiled
 def matmul_idiomatic_tiled[
     size: Int
 ](
     output: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
-    a: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
-    b: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
+    a: TileTensor[mut=False, dtype, LayoutType, MutAnyOrigin],
+    b: TileTensor[mut=False, dtype, LayoutType, MutAnyOrigin],
 ):
     # Use block_dim to get actual tile size dynamically
     var tile_size_x = block_dim.x
@@ -43,24 +42,34 @@ def matmul_idiomatic_tiled[
 
     # Get the tile of the output matrix that this thread block is responsible for
     var out_tile = output.tile[TILE_SIZE, TILE_SIZE](block_idx.y, block_idx.x)
-    var a_shared = stack_allocation[
-        dtype=dtype, address_space=AddressSpace.SHARED
-    ](row_major[TILE_SIZE, TILE_SIZE]())
-    var b_shared = stack_allocation[
-        dtype=dtype, address_space=AddressSpace.SHARED
-    ](row_major[TILE_SIZE, TILE_SIZE]())
+    var a_shared = LayoutTensor[
+        dtype,
+        Layout.row_major(TILE_SIZE, TILE_SIZE),
+        MutAnyOrigin,
+        address_space=AddressSpace.SHARED,
+    ].stack_allocation()
+    var b_shared = LayoutTensor[
+        dtype,
+        Layout.row_major(TILE_SIZE, TILE_SIZE),
+        MutAnyOrigin,
+        address_space=AddressSpace.SHARED,
+    ].stack_allocation()
 
     var acc: output.ElementType = 0
 
-    comptime load_a_layout = row_major[1, TILE_SIZE]()  # Coalesced loading
-    comptime load_b_layout = row_major[1, TILE_SIZE]()  # Coalesced loading
+    comptime load_a_layout = Layout.row_major(1, TILE_SIZE)  # Coalesced loading
+    comptime load_b_layout = Layout.row_major(1, TILE_SIZE)  # Coalesced loading
     # Note: Both matrices stored in same orientation for correct matrix multiplication
     # Transposed loading would be useful if B were pre-transposed in global memory
 
     for idx in range(size // TILE_SIZE):  # Iterate over K tiles
         # Get tiles from A and B matrices
-        var a_tile = a.tile[TILE_SIZE, TILE_SIZE](block_idx.y, idx)
-        var b_tile = b.tile[TILE_SIZE, TILE_SIZE](idx, block_idx.x)
+        var a_tile = a.tile[TILE_SIZE, TILE_SIZE](
+            block_idx.y, idx
+        ).to_layout_tensor()
+        var b_tile = b.tile[TILE_SIZE, TILE_SIZE](
+            idx, block_idx.x
+        ).to_layout_tensor()
 
         # Asynchronously copy tiles to shared memory with consistent orientation
         copy_dram_to_sram_async[
@@ -84,7 +93,9 @@ def matmul_idiomatic_tiled[
                 and local_col < TILE_SIZE
                 and k < TILE_SIZE
             ):
-                acc += a_shared[local_row, k] * b_shared[k, local_col]
+                acc += rebind[Scalar[dtype]](a_shared[local_row, k]) * rebind[
+                    Scalar[dtype]
+                ](b_shared[k, local_col])
 
         barrier()
 
@@ -93,9 +104,8 @@ def matmul_idiomatic_tiled[
         out_tile[local_row, local_col] = acc
 
 
-# ANCHOR_END: matmul_idiomatic_tiled_solution
+# ANCHOR_END: matmul_idiomatic_tiled
 
-# ANCHOR: tensor_core_matrix_multiplication
 # Block and warp tiling sizes
 comptime BM = 4 * WARP_SIZE  # Block tile M (4 warps along M)
 comptime BN = 2 * WARP_SIZE  # Block tile N (2 warps along N)
@@ -116,8 +126,12 @@ comptime BLOCKS_PER_GRID_TENSOR_CORE = (
 )
 
 
+# ANCHOR: tensor_core_matrix_multiplication
 def tensor_core_matrix_multiplication[
     dtype: DType,
+    layout_a: Layout,
+    layout_b: Layout,
+    layout_c: Layout,
     BM: Int,
     BN: Int,
     BK: Int,
@@ -127,13 +141,13 @@ def tensor_core_matrix_multiplication[
     MMA_N: Int,
     MMA_K: Int,
 ](
-    A: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
-    B: TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin],
-    C: TileTensor[mut=True, dtype, LayoutType, MutAnyOrigin],
+    A: LayoutTensor[dtype, layout_a, ImmutAnyOrigin],
+    B: LayoutTensor[dtype, layout_b, ImmutAnyOrigin],
+    C: LayoutTensor[dtype, layout_c, MutAnyOrigin],
 ):
-    comptime M = C.dim[0]()
-    comptime N = C.dim[1]()
-    comptime K = A.dim[1]()
+    comptime M = C.shape[0]()
+    comptime N = C.shape[1]()
+    comptime K = A.shape[1]()
 
     var warp_id = thread_idx.x // WARP_SIZE
     var warps_in_n = BN // WN
@@ -149,23 +163,34 @@ def tensor_core_matrix_multiplication[
     var mma_op = TensorCore[A.dtype, C.dtype, Index(MMA_M, MMA_N, MMA_K)]()
 
     # Shared SRAM tiles (no padding to stay under shared memory limit)
-    var A_sram_tile = stack_allocation[
-        dtype=A.dtype, address_space=AddressSpace.SHARED
-    ](row_major[BM, BK]())
-    var B_sram_tile = stack_allocation[
-        dtype=B.dtype, address_space=AddressSpace.SHARED
-    ](row_major[BK, BN]())
+    var A_sram_tile = LayoutTensor[
+        A.dtype,
+        Layout.row_major(BM, BK),
+        MutAnyOrigin,
+        address_space=AddressSpace.SHARED,
+    ].stack_allocation()
+    var B_sram_tile = LayoutTensor[
+        B.dtype,
+        Layout.row_major(BK, BN),
+        MutAnyOrigin,
+        address_space=AddressSpace.SHARED,
+    ].stack_allocation()
 
     # One per-warp accumulator tile of shape [WM, WN]
-    var C_warp_accum = stack_allocation[
-        dtype=C.dtype, address_space=AddressSpace.GENERIC
-    ](row_major[WM, WN]())
+    var C_warp_accum = LayoutTensor[
+        C.dtype,
+        Layout.row_major(WM, WN),
+        MutAnyOrigin,
+        address_space=AddressSpace.LOCAL,
+    ].stack_allocation()
 
     # Zero initialize accumulator (only for active warps)
     if warp_is_active:
         comptime for i in range(WM):
             comptime for j in range(WN):
                 C_warp_accum[i, j] = 0.0
+
+    # (Removed shared C accumulator to reduce shared usage)
 
     # Sweep across K in BK chunks (single-buffered)
     for k_i in range(K // BK):
@@ -175,12 +200,12 @@ def tensor_core_matrix_multiplication[
         var B_dram_tile = B.tile[BK, BN](k_i, block_idx.x)
 
         copy_dram_to_sram_async[
-            thread_layout=row_major[4, 8](),
+            thread_layout=Layout.row_major(4, 8),
             num_threads=256,
             block_dim_count=BLOCK_DIM_COUNT,
         ](A_sram_tile.vectorize[1, 4](), A_dram_tile.vectorize[1, 4]())
         copy_dram_to_sram_async[
-            thread_layout=row_major[4, 8](),
+            thread_layout=Layout.row_major(4, 8),
             num_threads=256,
             block_dim_count=BLOCK_DIM_COUNT,
         ](B_sram_tile.vectorize[1, 4](), B_dram_tile.vectorize[1, 4]())
@@ -259,11 +284,19 @@ def main() raises:
                             inp1_host[i * SIZE + k] * inp2_host[k * SIZE + j]
                         )
         # Create layout tensors
-        var out_tensor_core_layout = TileTensor(out_tensor_core, layout)
-        var a_tensor = TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin](
+        comptime old_layout = Layout.row_major(SIZE, SIZE)
+        var out_tensor_core_layout = LayoutTensor[dtype, old_layout](
+            out_tensor_core.unsafe_ptr()
+        )
+        var a_tensor = LayoutTensor[dtype, old_layout, ImmutAnyOrigin](inp1)
+        var b_tensor = LayoutTensor[dtype, old_layout, ImmutAnyOrigin](inp2)
+
+        # Create TileTensors for the tiled kernel
+        var out_tile_tensor = TileTensor(out_tensor_core, layout)
+        var a_tile_tensor = TileTensor[mut=False, dtype, LayoutType](
             inp1, layout
         )
-        var b_tensor = TileTensor[mut=False, dtype, LayoutType, ImmutAnyOrigin](
+        var b_tile_tensor = TileTensor[mut=False, dtype, LayoutType](
             inp2, layout
         )
 
@@ -271,6 +304,9 @@ def main() raises:
             print("\n=== Running ACTUAL Tensor Core Matrix Multiplication ===")
             comptime kernel = tensor_core_matrix_multiplication[
                 dtype,
+                old_layout,
+                old_layout,
+                old_layout,
                 BM,
                 BN,
                 BK,
@@ -280,7 +316,7 @@ def main() raises:
                 MMA_N,
                 MMA_K,
             ]
-            ctx.enqueue_function[kernel, kernel](
+            ctx.enqueue_function[kernel](
                 a_tensor,
                 b_tensor,
                 out_tensor_core_layout,
@@ -289,7 +325,7 @@ def main() raises:
             )
             ctx.synchronize()
             print("SUCCESS: Tensor core matmul completed!")
-            print("Puzzle 33 complete ✅")
+            print("Puzzle 33 complete")
 
         elif mode == "--tiled":
             print("\n=== Running Idiomatic Tiled Matrix Multiplication ===")
@@ -301,16 +337,16 @@ def main() raises:
 
             # Run idiomatic tiled version with proper 2D block configuration
             comptime kernel = matmul_idiomatic_tiled[SIZE]
-            ctx.enqueue_function[kernel, kernel](
+            ctx.enqueue_function[kernel](
                 out_tiled_layout,
-                a_tensor,
-                b_tensor,
+                a_tile_tensor,
+                b_tile_tensor,
                 grid_dim=BLOCK_PER_GRID_TILED,
                 block_dim=THREADS_PER_BLOCK_TILED,
             )
             ctx.synchronize()
             print("SUCCESS: Idiomatic tiled matmul completed!")
-            print("Puzzle 33 complete ✅")
+            print("Puzzle 33 complete")
 
         elif mode == "--test":
             print("\n=== Running All Accuracy Tests ===")
@@ -323,6 +359,9 @@ def main() raises:
             print("\n--- Test 1: Tensor Core vs CPU Reference ---")
             comptime kernel = tensor_core_matrix_multiplication[
                 dtype,
+                old_layout,
+                old_layout,
+                old_layout,
                 BM,
                 BN,
                 BK,
@@ -332,7 +371,7 @@ def main() raises:
                 MMA_N,
                 MMA_K,
             ]
-            ctx.enqueue_function[kernel, kernel](
+            ctx.enqueue_function[kernel](
                 a_tensor,
                 b_tensor,
                 out_tensor_core_layout,
@@ -388,7 +427,7 @@ def main() raises:
                     print("Tensor core test: passed")
                 else:
                     print(
-                        "❌ TENSOR CORE ACCURACY TEST FAILED -",
+                        "TENSOR CORE ACCURACY TEST FAILED -",
                         error_count,
                         "mismatches out of",
                         SIZE * SIZE,
@@ -402,10 +441,10 @@ def main() raises:
             out_tiled_layout = TileTensor(out_tiled, layout)
 
             comptime kernel2 = matmul_idiomatic_tiled[SIZE]
-            ctx.enqueue_function[kernel2, kernel2](
+            ctx.enqueue_function[kernel2](
                 out_tiled_layout,
-                a_tensor,
-                b_tensor,
+                a_tile_tensor,
+                b_tile_tensor,
                 grid_dim=BLOCK_PER_GRID_TILED,
                 block_dim=THREADS_PER_BLOCK_TILED,
             )
@@ -433,7 +472,7 @@ def main() raises:
                     tiled_success = True
                 except:
                     print(
-                        "❌ IDIOMATIC TILED ACCURACY TEST FAILED -"
+                        "IDIOMATIC TILED ACCURACY TEST FAILED -"
                         " assert_almost_equal failed"
                     )
                     tiled_success = False
@@ -441,11 +480,13 @@ def main() raises:
             print("\n=== ACCURACY TEST SUMMARY ===")
             if tc_success and tiled_success:
                 print("ALL TESTS PASSED!")
-                print("Puzzle 33 complete ✅")
+                print("Puzzle 33 complete")
             else:
                 print("Some tests failed:")
-                print("   - Tensor Core:", "✅" if tc_success else "❌")
-                print("   - Idiomatic Tiled:", "✅" if tiled_success else "❌")
+                print("   - Tensor Core:", "PASS" if tc_success else "FAIL")
+                print(
+                    "   - Idiomatic Tiled:", "PASS" if tiled_success else "FAIL"
+                )
 
         else:
             print("ERROR: Unknown option:", mode)
@@ -467,11 +508,11 @@ def main() raises:
 
     print("\nPerformance Analysis:")
     print(
-        "1. Build: pixi run mojo build solutions/p33/p33.mojo -o"
-        " solutions/p33/p33_profiler"
+        "1. Build: pixi run mojo build problems/p33/p33.mojo -o"
+        " problems/p33/p33_profiler"
     )
     print(
         "2. Profile: ncu --set full --metrics"
         " smspinst_executed_pipe_tensor_op_hmma.sum,smsp_pipe_tensor_op_hmma_cycles_active.sum"
-        " ./solutions/p33/p33_profiler --tensor-core"
+        " ./problems/p33/p33_profiler --tensor-core"
     )

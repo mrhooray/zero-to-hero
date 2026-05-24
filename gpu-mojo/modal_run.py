@@ -16,6 +16,9 @@ image = (
     modal.Image.debian_slim()
     .apt_install("curl", "bash", "ca-certificates")
     .run_commands("curl -fsSL https://pixi.sh/install.sh | PIXI_HOME=/usr/local bash")
+    .run_commands(
+        "pixi self-update --version 0.69.0 --no-release-note",
+    )
     .workdir("/app")
     .add_local_file("pixi.toml", "/app/pixi.toml", copy=True)
     .add_local_file("pixi.lock", "/app/pixi.lock", copy=True)

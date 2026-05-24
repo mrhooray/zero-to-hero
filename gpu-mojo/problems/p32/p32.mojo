@@ -67,16 +67,16 @@ def two_way_conflict_kernel(
     Each bank serves 2 threads, doubling access time.
     """
 
-    # Shared memory buffer - stride-2 access pattern creates conflicts
+    # Sized to 2*TPB so stride-2 writes don't alias (threads i and i+TPB/2).
     var shared_buf = stack_allocation[
         dtype=dtype, address_space=AddressSpace.SHARED
-    ](row_major[TPB]())
+    ](row_major[2 * TPB]())
 
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var local_i = thread_idx.x
 
     # CONFLICT: stride-2 access creates 2-way bank conflicts
-    var conflict_index = (local_i * 2) % TPB
+    var conflict_index = local_i * 2
 
     # Load with bank conflicts
     if global_i < size:
@@ -121,7 +121,7 @@ def benchmark_no_conflict[test_size: Int](mut b: Bencher) raises:
         )
 
         comptime kernel = no_conflict_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             out_tensor,
             input_tensor,
             test_size,
@@ -158,7 +158,7 @@ def benchmark_two_way_conflict[test_size: Int](mut b: Bencher) raises:
         )
 
         comptime kernel = two_way_conflict_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             out_tensor,
             input_tensor,
             test_size,
@@ -190,7 +190,7 @@ def test_no_conflict() raises:
         )
 
         comptime kernel = no_conflict_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             out_tensor,
             input_tensor,
             SIZE,
@@ -224,7 +224,7 @@ def test_two_way_conflict() raises:
         )
 
         comptime kernel = two_way_conflict_kernel
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             out_tensor,
             input_tensor,
             SIZE,

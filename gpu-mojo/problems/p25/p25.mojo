@@ -154,7 +154,7 @@ def test_neighbor_difference() raises:
         var output_tensor = TileTensor(output_buf, layout)
 
         comptime kernel = neighbor_difference[SIZE]
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             output_tensor,
             input_tensor,
             grid_dim=BLOCKS_PER_GRID,
@@ -200,7 +200,7 @@ def test_moving_average() raises:
         var output_tensor = TileTensor(output_buf, layout_2)
 
         comptime kernel = moving_average_3[SIZE_2]
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             output_tensor,
             input_tensor,
             grid_dim=BLOCKS_PER_GRID_2,
@@ -268,7 +268,7 @@ def test_broadcast_shuffle_coordination() raises:
         var output_tensor = TileTensor(output_buf, layout)
 
         comptime kernel = broadcast_shuffle_coordination[SIZE]
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             output_tensor,
             input_tensor,
             grid_dim=BLOCKS_PER_GRID,
@@ -320,7 +320,7 @@ def test_basic_broadcast() raises:
         var output_tensor = TileTensor(output_buf, layout)
 
         comptime kernel = basic_broadcast[SIZE]
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             output_tensor,
             input_tensor,
             grid_dim=BLOCKS_PER_GRID,
@@ -378,7 +378,7 @@ def test_conditional_broadcast() raises:
         var output_tensor = TileTensor(output_buf, layout)
 
         comptime kernel = conditional_broadcast[SIZE]
-        ctx.enqueue_function[kernel, kernel](
+        ctx.enqueue_function[kernel](
             output_tensor,
             input_tensor,
             grid_dim=BLOCKS_PER_GRID,

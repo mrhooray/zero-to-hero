@@ -95,7 +95,7 @@ def benchmark_kernel1_parameterized[test_size: Int](mut b: Bencher) raises:
         var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
         var b_tensor = TileTensor[mut=False, dtype, LayoutType](b_buf, layout)
 
-        ctx.enqueue_function[kernel1, kernel1](
+        ctx.enqueue_function[kernel1](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -134,7 +134,7 @@ def benchmark_kernel2_parameterized[test_size: Int](mut b: Bencher) raises:
         var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
         var b_tensor = TileTensor[mut=False, dtype, LayoutType](b_buf, layout)
 
-        ctx.enqueue_function[kernel2, kernel2](
+        ctx.enqueue_function[kernel2](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -173,7 +173,7 @@ def benchmark_kernel3_parameterized[test_size: Int](mut b: Bencher) raises:
         var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
         var b_tensor = TileTensor[mut=False, dtype, LayoutType](b_buf, layout)
 
-        ctx.enqueue_function[kernel3, kernel3](
+        ctx.enqueue_function[kernel3](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -210,7 +210,7 @@ def test_kernel1() raises:
         var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
         var b_tensor = TileTensor[mut=False, dtype, LayoutType](b, layout)
 
-        ctx.enqueue_function[kernel1, kernel1](
+        ctx.enqueue_function[kernel1](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -253,7 +253,7 @@ def test_kernel2() raises:
         var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
         var b_tensor = TileTensor[mut=False, dtype, LayoutType](b, layout)
 
-        ctx.enqueue_function[kernel2, kernel2](
+        ctx.enqueue_function[kernel2](
             out_tensor,
             a_tensor,
             b_tensor,
@@ -299,7 +299,7 @@ def test_kernel3() raises:
         var a_tensor = TileTensor[mut=False, dtype, LayoutType](a, layout)
         var b_tensor = TileTensor[mut=False, dtype, LayoutType](b, layout)
 
-        ctx.enqueue_function[kernel3, kernel3](
+        ctx.enqueue_function[kernel3](
             out_tensor,
             a_tensor,
             b_tensor,

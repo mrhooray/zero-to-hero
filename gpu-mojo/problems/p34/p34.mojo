@@ -19,19 +19,19 @@ comptime TPB = 256
 comptime CLUSTER_SIZE = 4
 comptime dtype = DType.float32
 comptime in_layout = row_major[SIZE]()
-comptime InLayoutType = type_of(in_layout)
 comptime out_layout = row_major[1]()
-comptime OutLayoutType = type_of(out_layout)
+comptime InLayout = type_of(in_layout)
+comptime OutLayout = type_of(out_layout)
 comptime cluster_layout = row_major[CLUSTER_SIZE]()
-comptime ClusterLayoutType = type_of(cluster_layout)
+comptime ClusterLayout = type_of(cluster_layout)
 
 
 # ANCHOR: cluster_coordination_basics
 def cluster_coordination_basics[
     tpb: Int
 ](
-    output: TileTensor[mut=True, dtype, ClusterLayoutType, MutAnyOrigin],
-    input: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
+    output: TileTensor[mut=True, dtype, ClusterLayout, MutAnyOrigin],
+    input: TileTensor[mut=False, dtype, InLayout, MutAnyOrigin],
     size: Int,
 ):
     """Real cluster coordination using SM90+ cluster APIs."""
@@ -82,15 +82,14 @@ def cluster_coordination_basics[
 def cluster_collective_operations[
     tpb: Int
 ](
-    output: TileTensor[mut=True, dtype, OutLayoutType, MutAnyOrigin],
-    input: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
-    temp_storage: TileTensor[mut=True, dtype, ClusterLayoutType, MutAnyOrigin],
+    output: TileTensor[mut=True, dtype, OutLayout, MutAnyOrigin],
+    input: TileTensor[mut=False, dtype, InLayout, MutAnyOrigin],
+    temp_storage: TileTensor[mut=True, dtype, ClusterLayout, MutAnyOrigin],
     size: Int,
 ):
     """Cluster-wide collective operations using real cluster APIs."""
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var local_i = thread_idx.x
-
     # FILL IN (roughly 24 lines)
 
 
@@ -101,15 +100,14 @@ def cluster_collective_operations[
 def advanced_cluster_patterns[
     tpb: Int
 ](
-    output: TileTensor[mut=True, dtype, ClusterLayoutType, MutAnyOrigin],
-    input: TileTensor[mut=False, dtype, InLayoutType, ImmutAnyOrigin],
+    output: TileTensor[mut=True, dtype, ClusterLayout, MutAnyOrigin],
+    input: TileTensor[mut=False, dtype, InLayout, MutAnyOrigin],
     size: Int,
 ):
     """Advanced cluster programming using cluster masks and relaxed synchronization.
     """
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var local_i = thread_idx.x
-
     # FILL IN (roughly 26 lines)
 
 
@@ -136,13 +134,15 @@ def main() raises:
                 for i in range(SIZE):
                     input_host[i] = Scalar[dtype](i % 10) * 0.1
 
-            input_tensor = TileTensor[
-                mut=False, dtype, InLayoutType, ImmutAnyOrigin
-            ](input_buf, in_layout)
-            output_tensor = TileTensor(output_buf, cluster_layout)
+            input_tensor = TileTensor[mut=False, dtype, InLayout](
+                input_buf, in_layout
+            )
+            output_tensor = TileTensor[mut=True, dtype, ClusterLayout](
+                output_buf, cluster_layout
+            )
 
             comptime kernel = cluster_coordination_basics[TPB]
-            ctx.enqueue_function[kernel, kernel](
+            ctx.enqueue_function[kernel](
                 output_tensor,
                 input_tensor,
                 SIZE,
@@ -163,7 +163,7 @@ def main() raises:
                     assert_true(
                         result_host[i] > 0.0
                     )  # All blocks SHOULD produce non-zero results
-                    print("✅ Block", i, "produced result:", result_host[i])
+                    print("Block", i, "produced result:", result_host[i])
 
                 # FIX: Verify scaling pattern - each block should have DIFFERENT results
                 # Due to scaling by block_id + 1 in the kernel
@@ -176,7 +176,7 @@ def main() raises:
                 assert_true(
                     result_host[3] > result_host[2]
                 )  # Block 3 > Block 2
-                print("Puzzle 34 complete ✅")
+                print("Puzzle 34 complete")
 
         elif argv()[1] == "--reduction":
             print("Testing Cluster-Wide Reduction")
@@ -197,14 +197,18 @@ def main() raises:
 
             print("Expected sum:", expected_sum)
 
-            input_tensor = TileTensor[
-                mut=False, dtype, InLayoutType, ImmutAnyOrigin
-            ](input_buf, in_layout)
-            var output_tensor = TileTensor(output_buf, out_layout)
-            var temp_tensor = TileTensor(temp_buf, cluster_layout)
+            input_tensor = TileTensor[mut=False, dtype, InLayout](
+                input_buf, in_layout
+            )
+            var output_tensor = TileTensor[mut=True, dtype, OutLayout](
+                output_buf, out_layout
+            )
+            var temp_tensor = TileTensor[mut=True, dtype, ClusterLayout](
+                temp_buf, cluster_layout
+            )
 
             comptime kernel = cluster_collective_operations[TPB]
-            ctx.enqueue_function[kernel, kernel](
+            ctx.enqueue_function[kernel](
                 output_tensor,
                 input_tensor,
                 temp_tensor,
@@ -226,8 +230,8 @@ def main() raises:
                 assert_almost_equal(
                     result, expected_sum, atol=10.0
                 )  # Reasonable tolerance for cluster coordination
-                print("✅ Passed: Cluster reduction accuracy test")
-                print("Puzzle 34 complete ✅")
+                print("Passed: Cluster reduction accuracy test")
+                print("Puzzle 34 complete")
 
         elif argv()[1] == "--advanced":
             print("Testing Advanced Cluster Algorithms")
@@ -244,13 +248,15 @@ def main() raises:
                         Scalar[dtype](i % 50) * 0.02
                     )  # Pattern for testing
 
-            input_tensor = TileTensor[
-                mut=False, dtype, InLayoutType, ImmutAnyOrigin
-            ](input_buf, in_layout)
-            output_tensor = TileTensor(output_buf, cluster_layout)
+            input_tensor = TileTensor[mut=False, dtype, InLayout](
+                input_buf, in_layout
+            )
+            output_tensor = TileTensor[mut=True, dtype, ClusterLayout](
+                output_buf, cluster_layout
+            )
 
             comptime kernel = advanced_cluster_patterns[TPB]
-            ctx.enqueue_function[kernel, kernel](
+            ctx.enqueue_function[kernel](
                 output_tensor,
                 input_tensor,
                 SIZE,
@@ -271,7 +277,7 @@ def main() raises:
                     assert_true(
                         result_host[i] > 0.0
                     )  # All blocks SHOULD produce non-zero results
-                    print("✅ Advanced Block", i, "result:", result_host[i])
+                    print("Advanced Block", i, "result:", result_host[i])
 
                 # FIX: Advanced pattern should show DIFFERENT scaling per block
                 assert_true(
@@ -284,7 +290,7 @@ def main() raises:
                     result_host[3] > result_host[2]
                 )  # Block 3 > Block 2
 
-                print("Puzzle 34 complete ✅")
+                print("Puzzle 34 complete")
 
         else:
             print(
