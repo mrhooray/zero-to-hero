@@ -29,7 +29,13 @@ def neighbor_difference[
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var lane = Int(lane_id())
 
-    # FILL IN (roughly 7 lines)
+    if global_i < size:
+        var curr = input[global_i]
+        var next = shuffle_down(curr, 1)
+        if lane < WARP_SIZE - 1:
+            output[global_i] = next - curr
+        else:
+            output[global_i] = 0
 
 
 # ANCHOR_END: neighbor_difference
@@ -56,7 +62,18 @@ def moving_average_3[
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var lane = Int(lane_id())
 
-    # FILL IN (roughly 10 lines)
+    if global_i < size:
+        var curr = input[global_i]
+        var next1 = shuffle_down(curr, 1)
+        var next2 = shuffle_down(curr, 2)
+
+        # following does not handle cross warp/block average
+        if lane < WARP_SIZE - 2:
+            output[global_i] = (curr + next1 + next2) / 3
+        elif lane < WARP_SIZE - 1 and global_i < size - 1:
+            output[global_i] = (curr + next1) / 2
+        else:
+            output[global_i] = curr
 
 
 # ANCHOR_END: moving_average_3
