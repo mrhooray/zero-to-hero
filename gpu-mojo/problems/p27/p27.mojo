@@ -122,24 +122,39 @@ def block_histogram_bin_extract[
 
     # Step 1: Each thread determines its bin and element value
 
-    # FILL IN (roughly 9 lines)
+    var val: Scalar[dtype] = 0
+    var bin: Int = -1
+
+    if global_i < size:
+        val = input_data[global_i]
+        bin = Int(floor(val * Scalar[dtype](num_bins)))
+        if bin >= num_bins:
+            bin = num_bins - 1
+        elif bin < 0:
+            bin = 0
 
     # Step 2: Create predicate for target bin extraction
 
-    # FILL IN (roughly 3 line)
+    var match_bin: Int32 = 0
+    if global_i < size and bin == target_bin:
+        match_bin = 1
 
     # Step 3: Use block.prefix_sum() for parallel bin extraction!
     # This computes where each thread should write within the target bin
 
-    # FILL IN (1 line)
+    var left = block.prefix_sum[
+        dtype=DType.int32, block_size=tpb, exclusive=True
+    ](match_bin)
 
     # Step 4: Extract and pack elements belonging to target_bin
 
-    # FILL IN (roughly 2 line)
+    if match_bin == 1:
+        bin_output[left] = val
 
     # Step 5: Final thread computes total count for this bin
 
-    # FILL IN (roughly 3 line)
+    if local_i == tpb - 1:
+        count_output[0] = left + match_bin
 
 
 # ANCHOR_END: block_histogram
