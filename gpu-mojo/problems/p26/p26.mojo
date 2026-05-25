@@ -140,7 +140,10 @@ def warp_inclusive_prefix_sum[
     """
     var global_i = block_dim.x * block_idx.x + thread_idx.x
 
-    # FILL ME IN (roughly 4 lines)
+    if global_i < size:
+        var curr = input[global_i]
+        var sum = prefix_sum[exclusive=False](curr)
+        output[global_i] = sum
 
 
 # ANCHOR_END: warp_inclusive_prefix_sum
@@ -173,9 +176,28 @@ def warp_partition[
     var global_i = block_dim.x * block_idx.x + thread_idx.x
 
     if global_i < size:
-        var current_val = input[global_i]
+        var curr = input[global_i]
+        var less: Scalar[dtype] = 0
+        var more: Scalar[dtype] = 0
 
-        # FILL ME IN (roughly 13 lines)
+        if curr < pivot:
+            less = 1
+        else:
+            more = 1
+
+        var left = prefix_sum[exclusive=True](less)
+        var right = prefix_sum[exclusive=True](more)
+
+        var less_total = less
+        var offset = WARP_SIZE // 2
+        while offset > 0:
+            less_total += shuffle_xor(less_total, UInt32(offset))
+            offset //= 2
+
+        if curr < pivot:
+            output[UInt32(left)] = curr
+        else:
+            output[UInt32(less_total + right)] = curr
 
 
 # ANCHOR_END: warp_partition
