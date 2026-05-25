@@ -78,7 +78,16 @@ def block_sum_dot_product[
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var local_i = thread_idx.x
 
-    # FILL IN (roughly 6 lines)
+    var partial: Scalar[dtype] = 0
+    if global_i < size:
+        partial = a[global_i] * b[global_i]
+
+    sum = block.sum[block_size=tpb, broadcast=False](
+        SIMD[DType.float32, 1](partial)
+    )
+
+    if local_i == 0:
+        output[0] = sum[0]
 
 
 # ANCHOR_END: block_sum_dot_product
