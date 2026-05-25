@@ -186,24 +186,29 @@ def block_normalize_vector[
 
     # Step 1: Each thread loads its element
 
-    # FILL IN (roughly 3 lines)
+    var val = Scalar[dtype](0)
+    if global_i < size:
+        val = input_data[global_i]
 
     # Step 2: Use block.sum() to compute total sum (familiar from earlier!)
 
-    # FILL IN (1 line)
+    var sum = block.sum[block_size=tpb](val)
 
     # Step 3: Thread 0 computes mean value
 
-    # FILL IN (roughly 4 lines)
+    var mean = Scalar[dtype](1)
+    if local_i == 0:
+        mean = sum / Scalar[dtype](size)
 
     # Step 4: block.broadcast() shares mean to ALL threads!
     # This completes the block operations trilogy demonstration
 
-    # FILL IN (1 line)
+    mean = block.broadcast[block_size=tpb](val=mean, src_thread=0)
 
     # Step 5: Each thread normalizes by the mean
 
-    # FILL IN (roughly 3 lines)
+    if global_i < size:
+        output_data[global_i] = val / mean
 
 
 # ANCHOR_END: block_normalize
