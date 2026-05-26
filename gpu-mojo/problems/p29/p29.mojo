@@ -57,19 +57,63 @@ def multi_stage_image_blur_pipeline(
 
     # Stage 1: Load and preprocess (threads 0-127)
 
-    # FILL ME IN (roughly 10 lines)
+    if local_i < STAGE1_THREADS:
+        if global_i < size:
+            input_shared[local_i] = input[global_i] * 1.1
+        else:
+            input_shared[local_i] = 0
+
+        var next_i = local_i + STAGE1_THREADS
+        var next_global_i = global_i + STAGE1_THREADS
+        if next_i < TPB:
+            if next_global_i < size:
+                input_shared[next_i] = input[next_global_i] * 1.1
+            else:
+                input_shared[next_i] = 0
 
     barrier()  # Wait for Stage 1 completion
 
     # Stage 2: Apply blur (threads 128-255)
 
-    # FILL ME IN (roughly 25 lines)
+    if local_i >= STAGE1_THREADS:
+        var blur_i = local_i - STAGE1_THREADS
+        var sum: Scalar[dtype] = 0
+        var count = 0
+
+        for offset in range(-BLUR_RADIUS, BLUR_RADIUS + 1):
+            var input_i = blur_i + offset
+            if input_i >= 0 and input_i < TPB:
+                sum += rebind[Scalar[dtype]](input_shared[input_i])
+                count += 1
+
+        blur_shared[blur_i] = sum / Scalar[dtype](count)
+
+        var next_i = blur_i + STAGE1_THREADS
+        if next_i < TPB:
+            sum = 0
+            count = 0
+
+            for offset in range(-BLUR_RADIUS, BLUR_RADIUS + 1):
+                var input_i = next_i + offset
+                if input_i >= 0 and input_i < TPB:
+                    sum += rebind[Scalar[dtype]](input_shared[input_i])
+                    count += 1
+
+            blur_shared[next_i] = sum / Scalar[dtype](count)
 
     barrier()  # Wait for Stage 2 completion
 
     # Stage 3: Final smoothing (all threads)
 
-    # FILL ME IN (roughly 7 lines)
+    if global_i < size:
+        var val = rebind[Scalar[dtype]](blur_shared[local_i])
+
+        if local_i > 0:
+            val = (val + rebind[Scalar[dtype]](blur_shared[local_i - 1])) * 0.6
+        if local_i < TPB - 1:
+            val = (val + rebind[Scalar[dtype]](blur_shared[local_i + 1])) * 0.6
+
+        output[global_i] = val
 
     barrier()  # Ensure all writes complete
 
