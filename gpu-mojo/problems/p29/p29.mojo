@@ -172,7 +172,10 @@ def double_buffered_stencil_computation(
 
     # Initialize buffer_A with input data
 
-    # FILL ME IN (roughly 4 lines)
+    if global_i < size:
+        buffer_A[local_i] = input[global_i]
+    else:
+        buffer_A[local_i] = 0
 
     # Wait for buffer_A initialization. mbarrier_test_wait is non-blocking, so
     # spin until it reports completion.
@@ -185,14 +188,30 @@ def double_buffered_stencil_computation(
         comptime if iteration % 2 == 0:
             # Even iteration: Read from A, Write to B
 
-            # FILL ME IN (roughly 12 lines)
-            ...
+            var sum: Scalar[dtype] = 0
+            var count = 0
+
+            for offset in range(-1, 2):
+                var input_i = local_i + offset
+                if input_i >= 0 and input_i < TPB:
+                    sum += rebind[Scalar[dtype]](buffer_A[input_i])
+                    count += 1
+
+            buffer_B[local_i] = sum / Scalar[dtype](count)
 
         else:
             # Odd iteration: Read from B, Write to A
 
-            # FILL ME IN (roughly 12 lines)
-            ...
+            var sum: Scalar[dtype] = 0
+            var count = 0
+
+            for offset in range(-1, 2):
+                var input_i = local_i + offset
+                if input_i >= 0 and input_i < TPB:
+                    sum += rebind[Scalar[dtype]](buffer_B[input_i])
+                    count += 1
+
+            buffer_A[local_i] = sum / Scalar[dtype](count)
 
         # Memory barrier: wait for all writes before buffer swap. test_wait is
         # non-blocking, so poll until every thread has arrived.
