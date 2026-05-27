@@ -63,16 +63,18 @@ def cluster_coordination_basics[
     # Phase 2: Use cluster_arrive() for inter-block coordination
     # Signal this block has completed processing
 
-    # FILL IN 1 line here
+    cluster_arrive()
 
     # Block-level aggregation (only thread 0)
     if local_i == 0:
-        # FILL IN 4 line here
-        ...
+        var sum: Scalar[dtype] = 0
+        for i in range(tpb):
+            sum += shared_data[i]
+        output[block_id] = sum
 
     # Wait for all blocks in cluster to complete
 
-    # FILL IN 1 line here
+    cluster_wait()
 
 
 # ANCHOR_END: cluster_coordination_basics
