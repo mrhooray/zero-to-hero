@@ -92,7 +92,39 @@ def cluster_collective_operations[
     """Cluster-wide collective operations using real cluster APIs."""
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var local_i = thread_idx.x
-    # FILL IN (roughly 24 lines)
+
+    var my_block_rank = Int(block_rank_in_cluster())
+    var block_id = block_idx.x
+
+    # load data
+    var shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[tpb]())
+
+    if global_i < size:
+        shared[local_i] = input[global_i]
+    else:
+        shared[local_i] = 0
+    barrier()
+
+    # parallel tree reduction
+    var stride = tpb // 2
+    while stride > 0:
+        if local_i < stride and local_i + stride < tpb:
+            shared[local_i] += shared[local_i + stride]
+        barrier()
+        stride = stride // 2
+
+    if local_i == 0:
+        temp_storage[block_id] = shared[0]
+
+    cluster_sync()
+
+    if my_block_rank == 0 and elect_one_sync():
+        var sum: Scalar[dtype] = 0
+        for i in range(CLUSTER_SIZE):
+            sum += temp_storage[i]
+        output[0] = sum
 
 
 # ANCHOR_END: cluster_collective_operations
