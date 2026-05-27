@@ -220,8 +220,20 @@ def tensor_core_matrix_multiplication[
             comptime for mma_k in range(BK // MMA_K):
                 comptime for mma_m in range(WM // MMA_M):
                     comptime for mma_n in range(WN // MMA_N):
-                        # FILL IN (roughly 8 lines)
-                        ...
+                        var A_mma_tile = A_warp_tile.tile[MMA_M, MMA_K](
+                            mma_m, mma_k
+                        )
+                        var B_mma_tile = B_warp_tile.tile[MMA_K, MMA_N](
+                            mma_k, mma_n
+                        )
+                        var C_mma_tile = C_warp_accum.tile[MMA_M, MMA_N](
+                            mma_m, mma_n
+                        )
+                        var a_reg = mma_op.load_a(A_mma_tile)
+                        var b_reg = mma_op.load_b(B_mma_tile)
+                        var c_reg = mma_op.load_c(C_mma_tile)
+                        var d_reg = mma_op.mma_op(a_reg, b_reg, c_reg)
+                        mma_op.store_d(C_mma_tile, d_reg)
 
     # Store the final per-warp accumulation to the output warp tile
     if warp_is_active:
