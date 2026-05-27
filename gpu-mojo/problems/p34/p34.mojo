@@ -142,7 +142,39 @@ def advanced_cluster_patterns[
     """
     var global_i = block_dim.x * block_idx.x + thread_idx.x
     var local_i = thread_idx.x
-    # FILL IN (roughly 26 lines)
+
+    var my_block_rank = Int(block_rank_in_cluster())
+    var block_id = block_idx.x
+
+    var shared = stack_allocation[
+        dtype=dtype, address_space=AddressSpace.SHARED
+    ](row_major[tpb]())
+
+    var data_scale = Scalar[dtype](block_id + 1)
+    if global_i < size:
+        shared[local_i] = input[global_i] * data_scale
+    else:
+        shared[local_i] = 0
+    barrier()
+
+    if elect_one_sync():
+        var warp_sum: Scalar[dtype] = 0
+        var warp_start = (local_i // 32) * 32
+        for i in range(32):
+            if warp_start + i < tpb:
+                warp_sum += shared[warp_start + i]
+        shared[warp_start] = warp_sum
+    barrier()
+
+    cluster_arrive()
+
+    if local_i == 0:
+        var block_sum: Scalar[dtype] = 0
+        for i in range(0, tpb, 32):
+            block_sum += shared[i]
+        output[block_id] = block_sum
+
+    cluster_wait()
 
 
 # ANCHOR_END: advanced_cluster_patterns
