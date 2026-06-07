@@ -1,6 +1,7 @@
 from tabular.agents.monte_carlo_average import MonteCarloAverageAgent
 from tabular.agents.monte_carlo_alpha import MonteCarloAlphaAgent
 from tabular.agents.td_zero import TDZeroAgent
+from tabular.agents.sarsa import SarsaAgent
 
 AGENTS = {
     agent.name: agent
@@ -8,6 +9,7 @@ AGENTS = {
         MonteCarloAverageAgent,
         MonteCarloAlphaAgent,
         TDZeroAgent,
+        SarsaAgent,
     )
 }
 
