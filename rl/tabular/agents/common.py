@@ -50,6 +50,37 @@ class TabularActionValueAgent:
         pass
 
 
+class TabularStateValueAgent:
+    name = "tabular-state-value"
+
+    def __init__(self, env: gym.Env[int, int], config: TrainingConfig) -> None:
+        self.config = config
+        self.observation_count = discrete_size(env.observation_space)
+        self.action_count = discrete_size(env.action_space)
+        self.v_values = np.zeros(self.observation_count, dtype=np.float64)
+        self.rng = np.random.default_rng(config.seed)
+
+    def start_episode(self, episode: int) -> None:
+        pass
+
+    def select_action(self, observation: int, training: bool = True) -> int:
+        return int(self.rng.integers(self.action_count))
+
+    def update(
+        self,
+        observation: int,
+        action: int,
+        reward: float,
+        next_observation: int,
+        terminated: bool,
+        truncated: bool,
+    ) -> None:
+        raise NotImplementedError
+
+    def end_episode(self) -> None:
+        pass
+
+
 # -------------------------------------------------------------------------
 # Utilities
 # -------------------------------------------------------------------------
