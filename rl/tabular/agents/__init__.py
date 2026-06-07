@@ -3,6 +3,7 @@ from tabular.agents.monte_carlo_alpha import MonteCarloAlphaAgent
 from tabular.agents.td_zero import TDZeroAgent
 from tabular.agents.sarsa import SarsaAgent
 from tabular.agents.sarsa_expected import SarsaExpectedAgent
+from tabular.agents.q_learning import QLearningAgent
 
 AGENTS = {
     agent.name: agent
@@ -12,6 +13,7 @@ AGENTS = {
         TDZeroAgent,
         SarsaAgent,
         SarsaExpectedAgent,
+        QLearningAgent,
     )
 }
 
