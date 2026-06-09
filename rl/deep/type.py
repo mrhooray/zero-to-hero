@@ -57,6 +57,14 @@ class TrainingConfig:
     sac_alpha: float = 0.2
     sac_target_tau: float = 0.005
 
+    # PPO
+    ppo_epochs: int = 4
+    ppo_clip_ratio: float = 0.2
+    ppo_gae_lambda: float = 0.95
+    ppo_value_coef: float = 0.5
+    ppo_entropy_coef: float = 0.01
+    ppo_gradient_clip: float = 0.5
+
 
 @dataclass(frozen=True)
 class EpisodeStats:

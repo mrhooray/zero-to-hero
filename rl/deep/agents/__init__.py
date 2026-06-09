@@ -1,5 +1,6 @@
 from deep.agents.reinforce import ReinforceAgent
 from deep.agents.dqn import DQNAgent
+from deep.agents.ppo import PPOAgent
 from deep.agents.sac import SACAgent
 
 AGENTS = {
@@ -7,6 +8,7 @@ AGENTS = {
     for agent in (
         ReinforceAgent,
         DQNAgent,
+        PPOAgent,
         SACAgent,
     )
 }
