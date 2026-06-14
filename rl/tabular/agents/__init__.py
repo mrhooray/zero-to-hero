@@ -4,6 +4,7 @@ from tabular.agents.td_zero import TDZeroAgent
 from tabular.agents.sarsa import SarsaAgent
 from tabular.agents.sarsa_expected import SarsaExpectedAgent
 from tabular.agents.q_learning import QLearningAgent
+from tabular.agents.dyna_q import DynaQAgent
 
 AGENTS = {
     agent.name: agent
@@ -14,6 +15,7 @@ AGENTS = {
         SarsaAgent,
         SarsaExpectedAgent,
         QLearningAgent,
+        DynaQAgent,
     )
 }
 
