@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from deep.agents.common import Transition
-from deep.agents.ppo import PPOAgent, RolloutStep
+from deep.agents.ppo import PPOAgent, PPOConfig, RolloutStep
 from deep.type import TrainingConfig
 
 
@@ -32,8 +32,8 @@ def test_ppo_stores_rollout_step_after_update() -> None:
 
 
 def test_ppo_advantages_use_next_step_value() -> None:
-    config = TrainingConfig(gamma=0.8, ppo_gae_lambda=0.5, hidden_size=16)
-    agent = PPOAgent(gym.make("CartPole-v1"), config)
+    config = TrainingConfig(gamma=0.8, hidden_size=16)
+    agent = PPOAgent(gym.make("CartPole-v1"), config, PPOConfig(gae_lambda=0.5))
     agent.rollout = [
         _rollout_step(reward=1.0, terminated=False),
         _rollout_step(reward=3.0, terminated=True),

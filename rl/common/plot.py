@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Protocol
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from deep.type import RunResult
+
+class ReturnSeries(Protocol):
+    agent_name: str
+
+    def returns(self) -> np.ndarray: ...
 
 
 def plot_returns(
-    results: list[RunResult],
+    results: list[ReturnSeries],
     output_path: str | Path,
     rolling_window: int = 16,
     show_raw: bool = True,

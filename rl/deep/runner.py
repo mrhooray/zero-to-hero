@@ -3,11 +3,8 @@ from __future__ import annotations
 import gymnasium as gym
 import numpy as np
 
-from deep.type import (
-    Agent,
-    EpisodeStats,
-    RunResult,
-)
+from common.type import EpisodeStats, RunResult
+from deep.type import Agent
 
 
 # -------------------------------------------------------------------------
@@ -77,4 +74,11 @@ def _run_episode(
             break
 
     agent.end_episode()
-    return EpisodeStats(episode, episode_return, length, terminated, truncated)
+    return EpisodeStats(
+        episode,
+        episode_return,
+        length,
+        terminated,
+        truncated,
+        is_success=truncated,
+    )

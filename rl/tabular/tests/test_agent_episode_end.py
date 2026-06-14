@@ -4,7 +4,7 @@ from tabular.agents.monte_carlo_alpha import MonteCarloAlphaAgent
 from tabular.agents.q_learning import QLearningAgent
 from tabular.agents.sarsa_expected import SarsaExpectedAgent
 from tabular.agents.td_zero import TDZeroAgent
-from tabular.gridworld import GridWorldEnv
+from common.grid_world import GridWorldEnv
 from tabular.type import TrainingConfig
 
 

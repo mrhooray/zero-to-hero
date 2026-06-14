@@ -1,6 +1,6 @@
 import pytest
 
-from tabular.gridworld import GridWorldEnv
+from common.grid_world import GridWorldEnv
 
 
 def test_gridworld_reaches_goal() -> None:

@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import gymnasium as gym
 
-from planning.type import (
-    Agent,
-    EpisodeStats,
-    EvaluationResult,
-    TrainingResult,
-)
+from common.grid_type import Agent
+from common.type import EpisodeStats, RunResult
 
 
 # -------------------------------------------------------------------------
@@ -17,19 +13,19 @@ def train(
     env: gym.Env[int, int],
     agent: Agent,
     episodes: int,
-) -> TrainingResult:
+) -> RunResult:
     stats = []
     for episode in range(episodes):
         stats.append(_run_episode(env, agent, episode=episode, training=True))
 
-    return TrainingResult(agent.name, stats)
+    return RunResult(agent.name, stats)
 
 
 def evaluate(
     env: gym.Env[int, int],
     agent: Agent,
     episodes: int,
-) -> EvaluationResult:
+) -> RunResult:
     stats = []
     for episode in range(episodes):
         stats.append(
@@ -41,7 +37,7 @@ def evaluate(
             )
         )
 
-    return EvaluationResult(agent.name, stats)
+    return RunResult(agent.name, stats)
 
 
 # -------------------------------------------------------------------------
@@ -56,7 +52,7 @@ def _run_episode(
     observation, _ = env.reset()
     agent.start_episode(episode)
     episode_return = 0.0
-    success = False
+    is_success = False
 
     while True:
         action = agent.select_action(observation, training=training)
@@ -72,10 +68,17 @@ def _run_episode(
             )
 
         episode_return += float(reward)
-        success = success or bool(info.get("is_success", False))
+        is_success = is_success or bool(info.get("is_success", False))
         observation = next_observation
         if terminated or truncated:
             break
 
     agent.end_episode()
-    return EpisodeStats(episode, episode_return, info["steps"], success)
+    return EpisodeStats(
+        episode,
+        episode_return,
+        info["steps"],
+        terminated,
+        truncated,
+        is_success,
+    )

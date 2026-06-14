@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import gymnasium as gym
 import numpy as np
 import torch
 from torch import nn
 
+from common.epsilon import epsilon_for_episode
 from deep.agents.common import (
     MLP,
     ReplayBuffer,
@@ -14,14 +17,29 @@ from deep.agents.common import (
 from deep.type import TrainingConfig
 
 
+@dataclass(frozen=True)
+class DQNConfig:
+    epsilon_start: float = 1.0
+    epsilon_end: float = 0.05
+    epsilon_decay_episodes: int = 256
+    target_tau: float = 0.005
+    gradient_clip: float = 1
+
+
 class DQNAgent:
     name = "dqn"
 
-    def __init__(self, env: gym.Env, config: TrainingConfig) -> None:
+    def __init__(
+        self,
+        env: gym.Env,
+        config: TrainingConfig,
+        dqn_config: DQNConfig = DQNConfig(),
+    ) -> None:
         torch.manual_seed(config.seed)
         self.rng = np.random.default_rng(config.seed)
 
         self.config = config
+        self.dqn_config = dqn_config
         self.observation_size, self.action_count = cartpole_sizes(env)
 
         self.q = MLP(self.observation_size, config.hidden_size, self.action_count)
@@ -37,12 +55,12 @@ class DQNAgent:
 
         self.steps = 0
         self.episode = 0
-        self.epsilon = config.dqn_epsilon_start
+        self.epsilon = dqn_config.epsilon_start
         self.replay = ReplayBuffer(config.replay_size, config.seed)
 
     def start_episode(self, episode: int) -> None:
         self.episode = episode
-        self.epsilon = _epsilon_for_episode(self.config, episode)
+        self.epsilon = epsilon_for_episode(self.dqn_config, episode)
 
     def select_action(self, observation: np.ndarray, training: bool = True) -> int:
         if training and self.rng.random() < self.epsilon:
@@ -86,10 +104,6 @@ class DQNAgent:
         )
         q_values = self.q(observations).gather(1, actions.unsqueeze(1)).squeeze(1)
         with torch.no_grad():
-            # DQN: target_q chooses and evaluates the next action.
-            # next_q = self.target_q(next_observations).max(dim=1).values
-
-            # Double DQN: q chooses the next action, target_q evaluates it.
             next_actions = self.q(next_observations).argmax(dim=1)
             next_q = (
                 self.target_q(next_observations)
@@ -104,7 +118,7 @@ class DQNAgent:
         loss = nn.functional.smooth_l1_loss(q_values, targets)
         self.optimizer.zero_grad()
         loss.backward()
-        nn.utils.clip_grad_value_(self.q.parameters(), self.config.dqn_gradient_clip)
+        nn.utils.clip_grad_value_(self.q.parameters(), self.dqn_config.gradient_clip)
         self.optimizer.step()
         self._update_target_network()
 
@@ -122,7 +136,7 @@ class DQNAgent:
             for target_param, q_param in zip(
                 self.target_q.parameters(), self.q.parameters()
             ):
-                target_param.lerp_(q_param, self.config.dqn_target_tau)
+                target_param.lerp_(q_param, self.dqn_config.target_tau)
 
     def _value_summary(self, values: torch.Tensor) -> str:
         values = values.detach()
@@ -145,11 +159,3 @@ class DQNAgent:
             f"p95={gradients.quantile(0.95).item():.3f} "
             f"max={gradients.max().item():.3f}"
         )
-
-
-def _epsilon_for_episode(config: TrainingConfig, episode: int) -> float:
-    decay_episodes = max(1, config.dqn_epsilon_decay_episodes)
-    progress = min(episode / decay_episodes, 1.0)
-    return config.dqn_epsilon_start + progress * (
-        config.dqn_epsilon_end - config.dqn_epsilon_start
-    )

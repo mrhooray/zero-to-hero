@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import gymnasium as gym
 import numpy as np
 import torch
@@ -15,13 +17,25 @@ from deep.agents.common import (
 from deep.type import TrainingConfig
 
 
+@dataclass(frozen=True)
+class SACConfig:
+    alpha: float = 0.2
+    target_tau: float = 0.005
+
+
 class SACAgent:
     name = "sac"
 
-    def __init__(self, env: gym.Env, config: TrainingConfig) -> None:
+    def __init__(
+        self,
+        env: gym.Env,
+        config: TrainingConfig,
+        sac_config: SACConfig = SACConfig(),
+    ) -> None:
         torch.manual_seed(config.seed)
 
         self.config = config
+        self.sac_config = sac_config
         self.observation_size, self.action_count = cartpole_sizes(env)
 
         self.policy = MLP(self.observation_size, config.hidden_size, self.action_count)
@@ -115,7 +129,7 @@ class SACAgent:
                 self.target_c1(next_observations),
                 self.target_c2(next_observations),
             )
-            entropy_bonus = -self.config.sac_alpha * next_log_probs
+            entropy_bonus = -self.sac_config.alpha * next_log_probs
             next_value = (next_probs * (next_critic_values + entropy_bonus)).sum(dim=1)
             target = rewards + self.config.gamma * (1.0 - terminated) * next_value
 
@@ -132,7 +146,7 @@ class SACAgent:
         log_probs = logits.log_softmax(dim=1)
         critic_values = torch.minimum(self.c1(observations), self.c2(observations))
         critic_values = critic_values.detach()
-        entropy_penalty = self.config.sac_alpha * log_probs
+        entropy_penalty = self.sac_config.alpha * log_probs
         loss = (probs * (entropy_penalty - critic_values)).sum(dim=1)
         self.policy_optimizer.zero_grad()
         loss.mean().backward()
@@ -143,8 +157,8 @@ class SACAgent:
             for target_param, critic_param in zip(
                 self.target_c1.parameters(), self.c1.parameters()
             ):
-                target_param.lerp_(critic_param, self.config.sac_target_tau)
+                target_param.lerp_(critic_param, self.sac_config.target_tau)
             for target_param, critic_param in zip(
                 self.target_c2.parameters(), self.c2.parameters()
             ):
-                target_param.lerp_(critic_param, self.config.sac_target_tau)
+                target_param.lerp_(critic_param, self.sac_config.target_tau)

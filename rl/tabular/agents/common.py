@@ -6,6 +6,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 
+from common.epsilon import epsilon_for_episode
 from tabular.type import TrainingConfig
 
 
@@ -88,12 +89,6 @@ def discrete_size(space: gym.Space) -> int:
     if not isinstance(space, spaces.Discrete):
         raise TypeError("this agent requires Discrete observation and action spaces")
     return int(space.n)
-
-
-def epsilon_for_episode(config: TrainingConfig, episode: int) -> float:
-    decay_episodes = max(1, config.epsilon_decay_episodes)
-    progress = min(episode / decay_episodes, 1.0)
-    return config.epsilon_start + progress * (config.epsilon_end - config.epsilon_start)
 
 
 def greedy_action(q_values: np.ndarray, rng: np.random.Generator) -> int:

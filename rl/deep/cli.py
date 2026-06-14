@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-
 from pathlib import Path
 import sys
 
@@ -11,7 +10,7 @@ if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from deep.agents import AGENT_NAMES, AGENTS
-from deep.plot import plot_returns
+from common.plot import plot_returns
 from deep.runner import evaluate, train
 from deep.type import TrainingConfig
 
@@ -156,7 +155,6 @@ def training_config_from_args(args: argparse.Namespace) -> TrainingConfig:
         hidden_size=args.hidden_size,
         batch_size=args.batch_size,
         warmup_steps=args.warmup_steps,
-        dqn_epsilon_decay_episodes=max(1, int(args.train_episodes * 0.5)),
         debug=args.debug,
     )
 

@@ -13,6 +13,16 @@ from deep.type import TrainingConfig
 
 
 @dataclass(frozen=True)
+class PPOConfig:
+    epochs: int = 4
+    clip_ratio: float = 0.2
+    gae_lambda: float = 0.95
+    value_coef: float = 0.5
+    entropy_coef: float = 0.01
+    gradient_clip: float = 0.5
+
+
+@dataclass(frozen=True)
 class RolloutStep:
     transition: Transition
     log_prob: torch.Tensor
@@ -28,10 +38,16 @@ class PendingStep:
 class PPOAgent:
     name = "ppo"
 
-    def __init__(self, env: gym.Env, config: TrainingConfig) -> None:
+    def __init__(
+        self,
+        env: gym.Env,
+        config: TrainingConfig,
+        ppo_config: PPOConfig = PPOConfig(),
+    ) -> None:
         torch.manual_seed(config.seed)
 
         self.config = config
+        self.ppo_config = ppo_config
         observation_size, action_count = cartpole_sizes(env)
 
         self.policy = MLP(observation_size, config.hidden_size, action_count)
@@ -110,7 +126,7 @@ class PPOAgent:
         if len(advantages) > 1:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        for _ in range(self.config.ppo_epochs):
+        for _ in range(self.ppo_config.epochs):
             indices = torch.randperm(len(actions))
             for start in range(0, len(actions), self.config.batch_size):
                 batch_indices = indices[start : start + self.config.batch_size]
@@ -137,8 +153,8 @@ class PPOAgent:
 
         ratio = torch.exp(log_probs - old_log_probs)
         clipped_ratio = ratio.clamp(
-            1.0 - self.config.ppo_clip_ratio,
-            1.0 + self.config.ppo_clip_ratio,
+            1.0 - self.ppo_config.clip_ratio,
+            1.0 + self.ppo_config.clip_ratio,
         )
         policy_loss = -torch.minimum(ratio * advantages, clipped_ratio * advantages)
         value_loss = nn.functional.mse_loss(values, returns)
@@ -146,12 +162,12 @@ class PPOAgent:
 
         loss = (
             policy_loss.mean()
-            + self.config.ppo_value_coef * value_loss
-            - self.config.ppo_entropy_coef * entropy_bonus.mean()
+            + self.ppo_config.value_coef * value_loss
+            - self.ppo_config.entropy_coef * entropy_bonus.mean()
         )
         self.optimizer.zero_grad()
         loss.backward()
-        nn.utils.clip_grad_norm_(self.parameters, self.config.ppo_gradient_clip)
+        nn.utils.clip_grad_norm_(self.parameters, self.ppo_config.gradient_clip)
         self.optimizer.step()
 
     def _advantages(self, values: torch.Tensor) -> torch.Tensor:
@@ -168,7 +184,7 @@ class PPOAgent:
             )
             advantage = (
                 delta
-                + self.config.gamma * self.config.ppo_gae_lambda * mask * advantage
+                + self.config.gamma * self.ppo_config.gae_lambda * mask * advantage
             )
             advantages.append(advantage)
             next_value = values[index].item()

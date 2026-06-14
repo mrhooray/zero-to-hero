@@ -8,13 +8,7 @@ from deep.type import TrainingConfig
 
 @pytest.mark.parametrize("agent_name", AGENTS.keys())
 def test_runner_trains_and_evaluates_deep_agents(agent_name: str) -> None:
-    config = TrainingConfig(
-        batch_size=4,
-        warmup_steps=4,
-        hidden_size=16,
-        dqn_epsilon_decay_episodes=1,
-        seed=24,
-    )
+    config = TrainingConfig(batch_size=4, warmup_steps=4, hidden_size=16, seed=24)
     env = gym.make("CartPole-v1")
     agent = AGENTS[agent_name](env, config)
 

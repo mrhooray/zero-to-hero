@@ -1,7 +1,7 @@
 import pytest
 
 from tabular.agents.sarsa import SarsaAgent
-from tabular.gridworld import GridWorldEnv
+from common.grid_world import GridWorldEnv
 from tabular.type import TrainingConfig
 
 
