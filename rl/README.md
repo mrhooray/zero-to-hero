@@ -6,6 +6,7 @@
 | --- | --- |
 | `tabular/` | Classic discrete-state RL on GridWorld |
 | `deep/` | Neural RL for environments like CartPole |
+| `planning/` | Model-based planning on GridWorld |
 
 ## Learning Methods
 
@@ -22,6 +23,9 @@
 | `deep/agents/dqn` | Replay-buffer DQN |
 | `deep/agents/ppo` | Clipped actor-critic policy gradient |
 | `deep/agents/sac` | Discrete soft actor-critic |
+| `planning/agents/vi` | Dynamic programming value iteration |
+| `planning/agents/pi` | Dynamic programming policy iteration |
+| `planning/agents/mcts` | Monte Carlo tree search |
 
 ## CLI
 
@@ -31,6 +35,8 @@ uv run tabular/cli.py train --algorithm q-learning --train-episodes 512 --show-p
 uv run tabular/cli.py benchmark --train-episodes 512 --eval-episodes 32 --plot tabular/plot/benchmark.png
 uv run deep/cli.py train --algorithm ppo --train-episodes 512 --plot deep/plot/ppo.png
 uv run deep/cli.py benchmark --train-episodes 512 --eval-episodes 32 --plot deep/plot/benchmark.png
+uv run planning/cli.py train --algorithm mcts --train-episodes 512 --plot planning/plot/mcts.png
+uv run planning/cli.py benchmark --train-episodes 512 --eval-episodes 32 --plot planning/plot/benchmark.png
 ```
 
 ## Test
