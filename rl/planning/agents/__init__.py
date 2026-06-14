@@ -1,7 +1,8 @@
-from __future__ import annotations
+from planning.agents.vi import ValueIterationAgent
 
-AGENTS: dict[str, type] = {}
-AGENT_NAMES: tuple[str, ...] = ()
+AGENTS = {agent.name: agent for agent in (ValueIterationAgent,)}
+
+AGENT_NAMES = tuple(AGENTS)
 
 __all__ = [
     "AGENTS",
