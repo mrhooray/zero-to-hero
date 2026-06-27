@@ -29,7 +29,7 @@ def main() -> None:
 # Wiring
 # -------------------------------------------------------------------------
 def _planning_config(args: argparse.Namespace) -> TrainingConfig:
-    return TrainingConfig(seed=args.seed)
+    return TrainingConfig(seed=args.agent_seed)
 
 
 if __name__ == "__main__":

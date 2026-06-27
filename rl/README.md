@@ -30,13 +30,13 @@
 ## CLI
 
 ```bash
-uv run tabular/cli.py render --size 8 --seed 42
-uv run tabular/cli.py train --algorithm q-learning --train-episodes 512 --show-policy --plot tabular/plot/q_learning.png
-uv run tabular/cli.py benchmark --train-episodes 512 --eval-episodes 32 --plot tabular/plot/benchmark.png
-uv run deep/cli.py train --algorithm ppo --train-episodes 512 --plot deep/plot/ppo.png
-uv run deep/cli.py benchmark --train-episodes 512 --eval-episodes 32 --plot deep/plot/benchmark.png
-uv run planning/cli.py train --algorithm mcts --train-episodes 512 --plot planning/plot/mcts.png
-uv run planning/cli.py benchmark --train-episodes 512 --eval-episodes 32 --plot planning/plot/benchmark.png
+uv run tabular/cli.py render --size 8 --env-seed 24
+uv run tabular/cli.py train --algorithm q-learning --env-seed 24 --agent-seed 24 --train-episodes 512 --show-policy --plot tabular/plot/q_learning.png
+uv run tabular/cli.py benchmark --seed 24 --runs 8 --train-episodes 512 --eval-episodes 32 --plot tabular/plot/benchmark.png
+uv run deep/cli.py train --algorithm ppo --env-seed 24 --agent-seed 24 --train-episodes 512 --plot deep/plot/ppo.png
+uv run deep/cli.py benchmark --seed 24 --runs 8 --train-episodes 512 --eval-episodes 32 --plot deep/plot/benchmark.png
+uv run planning/cli.py train --algorithm mcts --env-seed 24 --agent-seed 24 --train-episodes 512 --plot planning/plot/mcts.png
+uv run planning/cli.py benchmark --seed 24 --runs 8 --eval-episodes 32 --plot planning/plot/benchmark.png
 ```
 
 ## Test

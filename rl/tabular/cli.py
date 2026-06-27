@@ -34,7 +34,7 @@ def main() -> None:
 def _tabular_config(args: argparse.Namespace) -> TrainingConfig:
     return TrainingConfig(
         epsilon_decay_episodes=max(1, int(args.train_episodes * 0.5)),
-        seed=args.seed,
+        seed=args.agent_seed,
     )
 
 

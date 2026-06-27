@@ -3,9 +3,12 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable
 
+import numpy as np
+
 from common.grid_runner import evaluate, train
 from common.grid_world import GridWorldEnv
 from common.plot import plot_returns
+from common.seed import spawn_seeds
 from common.type import RunResult
 
 
@@ -31,7 +34,8 @@ def grid_main(
 
     train_parser = subparsers.add_parser("train")
     add_env_args(train_parser)
-    add_runner_args(train_parser)
+    add_episode_args(train_parser)
+    train_parser.add_argument("--agent-seed", type=int, default=24)
     train_parser.add_argument(
         "--algorithm", default=algorithm_default, choices=algorithm_choices
     )
@@ -43,8 +47,10 @@ def grid_main(
     )
 
     benchmark_parser = subparsers.add_parser("benchmark")
-    add_env_args(benchmark_parser)
-    add_runner_args(benchmark_parser)
+    add_episode_args(benchmark_parser)
+    benchmark_parser.add_argument("--size", type=int, default=8)
+    benchmark_parser.add_argument("--seed", type=int, default=24)
+    benchmark_parser.add_argument("--runs", type=int, default=8)
     benchmark_parser.add_argument("--plot", help="write all reward curves to one PNG")
     benchmark_parser.set_defaults(
         func=lambda args: _benchmark(args, config_fn, agent_map, algorithm_choices)
@@ -58,7 +64,7 @@ def grid_main(
 # Commands
 # -------------------------------------------------------------------------
 def _render(args: argparse.Namespace) -> None:
-    env = env_from_args(args)
+    env = make_env(args)
     env.reset()
     print(env.render())
 
@@ -70,15 +76,20 @@ def _train(
     extra_train_fn: Callable[[argparse.Namespace, object, GridWorldEnv], None] | None,
 ) -> None:
     config = config_fn(args)
-    env = env_from_args(args)
+    env = make_env(args)
     agent = agent_map[args.algorithm](env, config)
     train_result = train(env, agent, episodes=args.train_episodes)
-    eval_result = evaluate(env_from_args(args), agent, episodes=args.eval_episodes)
+    eval_result = evaluate(make_env(args), agent, episodes=args.eval_episodes)
 
-    print_train_eval_summary(train_result, eval_result)
+    print(
+        f"trained {train_result.agent_name} for {len(train_result.episodes)} episodes"
+    )
+    print(f"train success rate: {train_result.success_rate():.2%}")
+    print(f"eval mean return: {eval_result.mean_return():.3f}")
+    print(f"eval success rate: {eval_result.success_rate():.2%}")
     if args.plot:
-        plot_returns([train_result], args.plot)
-        print(f"wrote {args.plot}")
+        plot_returns([[train_result]], args.plot)
+        print(f"learning curves plot saved to {args.plot}")
     if extra_train_fn:
         extra_train_fn(args, agent, env)
 
@@ -89,22 +100,47 @@ def _benchmark(
     agent_map: dict[str, type],
     agent_names: tuple[str, ...] | list[str],
 ) -> None:
-    config = config_fn(args)
-    train_results: list[RunResult] = []
-    eval_results: list[RunResult] = []
-    print_grid_benchmark_header()
+    run_seeds = spawn_seeds(args.seed, args.runs)
+    benchmark_results: list[list[RunResult]] = []
+    row_format = "{:<16}  {:>13}  {:>14}  {:>14}"
+    print(f"{'run':>3}  {'env_seed':>10}  {'agent_seed':>10}")
+    for run, (env_seed, agent_seed) in enumerate(run_seeds):
+        print(f"{run:>3}  {env_seed:>10}  {agent_seed:>10}")
+    print()
+    print(row_format.format("agent", "mean_return", "success", "mean_len"))
     for name in agent_names:
-        env = env_from_args(args)
-        agent = agent_map[name](env, config)
-        train_results.append(train(env, agent, episodes=args.train_episodes))
-        eval_results.append(
-            evaluate(env_from_args(args), agent, episodes=args.eval_episodes)
-        )
+        train_results = []
+        eval_results = []
+        for env_seed, agent_seed in run_seeds:
+            run_args = argparse.Namespace(
+                **{
+                    **vars(args),
+                    "env_seed": env_seed,
+                    "agent_seed": agent_seed,
+                }
+            )
+            env = make_env(run_args)
+            agent = agent_map[name](env, config_fn(run_args))
+            train_results.append(train(env, agent, episodes=args.train_episodes))
+            eval_result = evaluate(
+                make_env(run_args),
+                agent,
+                episodes=args.eval_episodes,
+            )
+            eval_results.append(eval_result)
 
-    print_grid_benchmark_rows(eval_results)
+        benchmark_results.append(train_results)
+        print(
+            row_format.format(
+                name,
+                _mean_std(eval_results, "mean_return"),
+                _mean_std(eval_results, "success_rate", percent=True),
+                _mean_std(eval_results, "mean_length"),
+            )
+        )
     if args.plot:
-        plot_returns(train_results, args.plot, show_raw=False)
-        print(f"wrote {args.plot}")
+        plot_returns(benchmark_results, args.plot)
+        print(f"learning curves plot saved to {args.plot}")
 
 
 # -------------------------------------------------------------------------
@@ -112,45 +148,30 @@ def _benchmark(
 # -------------------------------------------------------------------------
 def add_env_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--size", type=int, default=8)
-    parser.add_argument("--seed", type=int, default=24)
+    parser.add_argument("--env-seed", type=int, default=24)
 
 
-def add_runner_args(parser: argparse.ArgumentParser) -> None:
+def add_episode_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--train-episodes", type=int, default=512)
     parser.add_argument("--eval-episodes", type=int, default=32)
 
 
-def env_from_args(args: argparse.Namespace) -> GridWorldEnv:
+def make_env(args: argparse.Namespace) -> GridWorldEnv:
     start = (0, 0)
     goal = (args.size - 1, args.size - 1)
     return GridWorldEnv(
         size=args.size,
         start=start,
-        traps=GridWorldEnv.generate_traps(args.size, args.seed, start, goal),
+        traps=GridWorldEnv.generate_traps(args.size, args.env_seed, start, goal),
     )
 
 
-# -------------------------------------------------------------------------
-# Print helpers
-# -------------------------------------------------------------------------
-def print_train_eval_summary(train_result: RunResult, eval_result: RunResult) -> None:
-    print(
-        f"trained {train_result.agent_name} for {len(train_result.episodes)} episodes"
-    )
-    print(f"train success rate: {train_result.success_rate():.2%}")
-    print(f"eval mean return: {eval_result.mean_return():.3f}")
-    print(f"eval success rate: {eval_result.success_rate():.2%}")
-
-
-def print_grid_benchmark_header() -> None:
-    print(f"{'agent':<22} {'mean_return':>12} {'success':>10} {'mean_len':>10}")
-
-
-def print_grid_benchmark_rows(results: list[RunResult]) -> None:
-    for row in results:
-        print(
-            f"{row.agent_name:<22} "
-            f"{row.mean_return():>12.3f} "
-            f"{row.success_rate():>9.2%} "
-            f"{row.mean_length():>10.1f}"
-        )
+def _mean_std(
+    results: list[RunResult],
+    metric: str,
+    percent: bool = False,
+) -> str:
+    values = np.array([getattr(result, metric)() for result in results])
+    scale = 100.0 if percent else 1.0
+    suffix = "%" if percent else ""
+    return f"{np.mean(values) * scale:.1f} ± {np.std(values) * scale:.1f}{suffix}"
