@@ -39,6 +39,20 @@ uv run planning/cli.py train --algorithm mcts --env-seed 24 --agent-seed 24 --tr
 uv run planning/cli.py benchmark --seed 24 --runs 8 --eval-episodes 32 --plot planning/plot/benchmark.png
 ```
 
+## Learning Curves
+
+### Tabular
+
+![Tabular](tabular/plot/benchmark.png)
+
+### Deep
+
+![Deep](deep/plot/benchmark.png)
+
+### Planning
+
+![Planning](planning/plot/benchmark.png)
+
 ## Test
 
 ```bash
