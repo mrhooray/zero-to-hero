@@ -62,6 +62,7 @@ class PPOAgent:
         self.rollout = []
         self.pending_step = None
 
+    @torch.no_grad()
     def select_action(self, observation: np.ndarray, training: bool = True) -> int:
         logits = self.policy(torch.as_tensor(observation, dtype=torch.float32))
         if not training:
@@ -69,12 +70,11 @@ class PPOAgent:
 
         distribution = Categorical(logits=logits)
         action = distribution.sample()
-
         self.pending_step = PendingStep(
-            log_prob=distribution.log_prob(action).detach(),
-            value=self.value(torch.as_tensor(observation, dtype=torch.float32))
-            .squeeze()
-            .detach(),
+            log_prob=distribution.log_prob(action),
+            value=self.value(
+                torch.as_tensor(observation, dtype=torch.float32)
+            ).squeeze(),
         )
         return int(action.item())
 

@@ -31,7 +31,8 @@ class ReinforceAgent:
     def select_action(self, observation: np.ndarray, training: bool = True) -> int:
         logits = self.policy(torch.as_tensor(observation, dtype=torch.float32))
         if not training:
-            return int(torch.argmax(logits).item())
+            with torch.no_grad():
+                return int(torch.argmax(logits).item())
 
         distribution = Categorical(logits=logits)
         action = distribution.sample()
