@@ -52,16 +52,26 @@ class ReplayBuffer:
     def sample(self, batch_size: int) -> tuple[torch.Tensor, ...]:
         indices = self.rng.choice(len(self.transitions), size=batch_size, replace=False)
         batch = [self.transitions[int(index)] for index in indices]
-        observations = torch.as_tensor(
-            np.array([item.observation for item in batch]), dtype=torch.float32
+        observations = torch.from_numpy(
+            np.stack([item.observation for item in batch]).astype(np.float32)
         )
-        actions = torch.as_tensor([item.action for item in batch], dtype=torch.int64)
-        rewards = torch.as_tensor([item.reward for item in batch], dtype=torch.float32)
-        next_observations = torch.as_tensor(
-            np.array([item.next_observation for item in batch]), dtype=torch.float32
+        actions = torch.from_numpy(
+            np.fromiter(
+                (item.action for item in batch), dtype=np.int64, count=batch_size
+            )
         )
-        terminated = torch.as_tensor(
-            [item.terminated for item in batch], dtype=torch.float32
+        rewards = torch.from_numpy(
+            np.fromiter(
+                (item.reward for item in batch), dtype=np.float32, count=batch_size
+            )
+        )
+        next_observations = torch.from_numpy(
+            np.stack([item.next_observation for item in batch]).astype(np.float32)
+        )
+        terminated = torch.from_numpy(
+            np.fromiter(
+                (item.terminated for item in batch), dtype=np.float32, count=batch_size
+            )
         )
         return observations, actions, rewards, next_observations, terminated
 
