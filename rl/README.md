@@ -1,4 +1,4 @@
-# RL Zero To Hero
+# RL Zero to Hero
 
 ## Structure
 
