@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="400" viewBox="0 0 720 400" role="img" aria-labelledby="title desc">
+<title id="title">GLM 5.3 Flash decode performance</title>
+<desc id="desc">Client-observed decode performance for Infer, TokenSpeed, SGLang, and Infer with NextN across a C4 to C128 concurrency sweep. Output tokens per second per user are plotted against output tokens per second per GPU.</desc>
+<style>
+  .background { fill: #ffffff; }
+  text { font-family: ui-sans-serif, system-ui, sans-serif; fill: #20262e; }
+  .muted { fill: #66717e; }
+  .grid { stroke: #dce2e8; stroke-width: 1; }
+  .frame { stroke: #7b8794; stroke-width: 1; fill: none; }
+  .tick { font-size: 11px; }
+  .point-label { font-size: 11px; font-weight: 500; }
+  .axis-title, .legend { font-size: 12px; }
+  .method-note { font-size: 12px; }
+  .title { font-size: 19px; font-weight: 600; }
+  .subtitle { font-size: 12px; }
+  @media (prefers-color-scheme: dark) {
+    .background { fill: #11151a; }
+    text { fill: #edf2f7; }
+    .muted { fill: #a6b0bb; }
+    .grid { stroke: #323a43; }
+    .frame { stroke: #687583; }
+  }
+</style>
+<rect class="background" width="720" height="400"/>
+<text class="title" x="90" y="28">GLM 5.3 Flash decode performance</text>
+<text class="subtitle muted" x="90" y="52">4×B200 · DP4+EP4 · 8,192-token prefix hit · C4–C128 sweep</text>
+<text class="method-note muted" x="90" y="70">DP+MTP/NextN not fully supported in TokenSpeed/SGLang at test time · comparator curves use target model only</text>
+
+<line x1="90" x2="110" y1="94" y2="94" stroke="#4299e1" stroke-width="2.5"/>
+<text class="legend" x="117" y="98">Infer</text>
+<line x1="180" x2="200" y1="94" y2="94" stroke="#ed8936" stroke-width="2.5" stroke-dasharray="7 5"/>
+<text class="legend" x="207" y="98">TokenSpeed</text>
+<line x1="310" x2="330" y1="94" y2="94" stroke="#48bb78" stroke-width="2.5" stroke-dasharray="7 5"/>
+<text class="legend" x="337" y="98">SGLang</text>
+<line x1="415" x2="435" y1="94" y2="94" stroke="#9f7aea" stroke-width="2.5"/>
+<text class="legend" x="442" y="98">Infer + NextN</text>
+
+<line class="grid" x1="90.00" x2="90.00" y1="120" y2="342"/>
+<text class="tick muted" x="90.00" y="361" text-anchor="middle">0</text>
+<line class="grid" x1="242.50" x2="242.50" y1="120" y2="342"/>
+<text class="tick muted" x="242.50" y="361" text-anchor="middle">50</text>
+<line class="grid" x1="395.00" x2="395.00" y1="120" y2="342"/>
+<text class="tick muted" x="395.00" y="361" text-anchor="middle">100</text>
+<line class="grid" x1="547.50" x2="547.50" y1="120" y2="342"/>
+<text class="tick muted" x="547.50" y="361" text-anchor="middle">150</text>
+<line class="grid" x1="700.00" x2="700.00" y1="120" y2="342"/>
+<text class="tick muted" x="700.00" y="361" text-anchor="middle">200</text>
+<line class="grid" x1="90" x2="700" y1="342.00" y2="342.00"/>
+<text class="tick muted" x="81" y="346.00" text-anchor="end">0</text>
+<line class="grid" x1="90" x2="700" y1="286.50" y2="286.50"/>
+<text class="tick muted" x="81" y="290.50" text-anchor="end">500</text>
+<line class="grid" x1="90" x2="700" y1="231.00" y2="231.00"/>
+<text class="tick muted" x="81" y="235.00" text-anchor="end">1k</text>
+<line class="grid" x1="90" x2="700" y1="175.50" y2="175.50"/>
+<text class="tick muted" x="81" y="179.50" text-anchor="end">1.5k</text>
+<line class="grid" x1="90" x2="700" y1="120.00" y2="120.00"/>
+<text class="tick muted" x="81" y="124.00" text-anchor="end">2k</text>
+<rect class="frame" x="90" y="120" width="610" height="222"/>
+
+<path d="M354.08,332.72 L334.76,307.64 L295.07,226.90 L247.96,165.82" fill="none" stroke="#4299e1" stroke-width="2.5"/>
+<circle cx="354.08" cy="332.72" r="4.5" fill="#4299e1"/>
+<text class="point-label" x="361.08" y="325.72">C4</text>
+<circle cx="334.76" cy="307.64" r="4.5" fill="#4299e1"/>
+<text class="point-label" x="341.76" y="300.64">C16</text>
+<circle cx="295.07" cy="226.90" r="4.5" fill="#4299e1"/>
+<text class="point-label" x="302.07" y="219.90">C64</text>
+<circle cx="247.96" cy="165.82" r="4.5" fill="#4299e1"/>
+<text class="point-label" x="254.96" y="158.82">C128</text>
+
+<path d="M353.35,332.61 L304.15,311.56 L249.59,251.88 L221.15,193.35" fill="none" stroke="#ed8936" stroke-width="2.5" stroke-dasharray="7 5"/>
+<rect x="349.35" y="328.61" width="8" height="8" fill="#ed8936"/>
+<rect x="300.15" y="307.56" width="8" height="8" fill="#ed8936"/>
+<rect x="245.59" y="247.88" width="8" height="8" fill="#ed8936"/>
+<rect x="217.15" y="189.35" width="8" height="8" fill="#ed8936"/>
+
+<path d="M370.24,332.18 L308.18,311.83 L241.79,260.12 L208.47,213.88" fill="none" stroke="#48bb78" stroke-width="2.5" stroke-dasharray="7 5"/>
+<polygon points="370.24,327.18 365.24,336.18 375.24,336.18" fill="#48bb78"/>
+<polygon points="308.18,306.83 303.18,315.83 313.18,315.83" fill="#48bb78"/>
+<polygon points="241.79,255.12 236.79,264.12 246.79,264.12" fill="#48bb78"/>
+<polygon points="208.47,208.88 203.47,217.88 213.47,217.88" fill="#48bb78"/>
+
+<path d="M594.10,327.30 L563.50,285.95 L376.33,202.85 L291.67,143.77" fill="none" stroke="#9f7aea" stroke-width="2.5"/>
+<polygon points="594.10,322.30 589.10,327.30 594.10,332.30 599.10,327.30" fill="#9f7aea"/>
+<polygon points="563.50,280.95 558.50,285.95 563.50,290.95 568.50,285.95" fill="#9f7aea"/>
+<polygon points="376.33,197.85 371.33,202.85 376.33,207.85 381.33,202.85" fill="#9f7aea"/>
+<polygon points="291.67,138.77 286.67,143.77 291.67,148.77 296.67,143.77" fill="#9f7aea"/>
+
+<text class="axis-title muted" x="395.00" y="380" text-anchor="middle">output tok/s/user</text>
+<text class="axis-title muted" transform="translate(50 231.00) rotate(-90)" text-anchor="middle">output tok/s/GPU</text>
+</svg>

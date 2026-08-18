@@ -1,0 +1,94 @@
+GLM-5.3 FlashKDA production dependency provenance
+==================================================
+
+This notice applies to the external dependency called by
+src/infer/models/glm53_flash/ops/prefill_kda.py. Infer does not vendor the
+FlashKDA or CUTLASS source trees. Its build installer embeds the derivative patch
+identified below. A source or binary distribution that includes the compiled
+FlashKDA extension must retain the upstream MIT notice and reproduce the
+CUTLASS BSD-3-Clause notice in its documentation or other distribution
+materials.
+
+FlashKDA origin: https://github.com/MoonshotAI/FlashKDA
+Commit: 1ce47ea3bb22c84eb9cc665028399cf35e8ffb0b
+Git tree: 0da9e9695b695d12f0389df32c0c0f78a1ffa26d
+Raw binding path: csrc/flash_kda.cpp
+Raw binding git blob: 81f5483247d28aa83ff8528cbd739a8ecafc8650
+Raw binding SHA-256: f736ab87c7c2e47fe416f8d04d62502a257a6ff32a0b23452c07e1bc65c87c04
+Infer patch locator: tools/kernels/install_flash_kda.py#FLASH_KDA_NOALLOC_PATCH
+Patch SHA-256: 27c80df97cfa24d8b4a5bebc53e6e8cc906c16afc1ed7509cf9da9af9424e464
+Patched raw binding SHA-256: 93382056dd78a5f1990f47656e3baaebe6b52b66d490345882d0e50a04b88c24
+Derivative package version: 0.0.1+1ce47ea.infer1
+The patch moves the beta transpose into caller-owned workspace without
+changing FlashKDA's arithmetic or Python/raw call signatures.
+Python wrapper path: flash_kda/__init__.py
+Python wrapper git blob: cc03493a2886b14c53069cf74fdc0fc9ed6f230d
+Python wrapper SHA-256: 9cb9bd39186f6993f0067a8ff720cd233ef4b474444f1fd0fcd2bf06cab5fb84
+Upstream license git blob: 780c8a399acb9f744fcf2f9cfd7a4dd9730dbfc7
+Upstream license SHA-256: 05f1750624d6ab5f6dd59dea79e3156f4fec6b3065c94aeeaf265df677f9e6e8
+
+The pinned FlashKDA build consumes NVIDIA CUTLASS as a git submodule:
+https://github.com/NVIDIA/cutlass
+Commit: 5c149f52a436782210263fb2f19b354443a61c6a
+License path: LICENSE.txt
+License git blob: e08eb49c207f1e24ea797d5162684f8c0329e9c9
+License SHA-256: 80a7a18b73d41f64dd9ca881af35938f8de88b18c728703251f4c94d1299884d
+
+SPDX-License-Identifier: MIT AND BSD-3-Clause
+
+MIT License
+
+Copyright (c) 2026 MoonshotAI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Copyright (c) 2017 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+may be used to endorse or promote products derived from this software without
+specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Certain files within this repository are subject to separate licensing terms:
+
+- The files located in the `python/CuTeDSL` directory are licensed under the
+  NVIDIA End User License Agreement (EULA). Please refer to
+  https://docs.nvidia.com/cutlass/media/docs/pythonDSL/license.html for the
+  full terms.

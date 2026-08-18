@@ -1,0 +1,44 @@
+TokenSpeed KDA megafuse provenance
+==================================
+
+This notice applies only to the vendored kernel in
+src/infer/models/glm53_flash/ops/megafuse.py.
+
+TokenSpeed origin:
+https://github.com/lightseekorg/tokenspeed
+Commit: 24ff5ab3dfd42aaea8f8f7476d4293f6c2717ed3
+Path: tokenspeed-kernel/python/tokenspeed_kernel/thirdparty/triton/fla_kda_recurrent.py
+Git blob: 10e461ab01013ce6837804b4eea8d57b2b8ae7b1
+Source SHA-256: e4ac7c46c534dc4403d3f7d204c05dd3ca0675ce6a835dfadb1a99d35d080f7f
+Decode source lines: 488-687
+Decode source slice SHA-256: 8cba6db8936eb80336154794271122928fae9d898bb94ec44b7501f2536d3f40
+Local verify kernel SHA-256: a4f3425b1df8b50fbcccd14fe42df0edd60fc610e15c9274232bd5ebee5ca2ae
+
+Copyright (c) 2026 LightSeek Foundation <contact@lightseek.org>
+
+The TokenSpeed source identifies the kernel as derived from
+fla-org/flash-linear-attention v0.5.1:
+https://github.com/fla-org/flash-linear-attention
+Tag commit: 2e38c1fab332174d056928feaf29f8c5fd5ac550
+
+Copyright (c) 2023-2026, Songlin Yang, Yu Zhang, Zhiyuan Li
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

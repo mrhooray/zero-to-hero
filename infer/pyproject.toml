@@ -1,0 +1,54 @@
+[project]
+name = "infer"
+version = "0.1.0"
+description = "Minimal high-performance inference server for DeepSeek V4 Flash and GLM 5.3 Flash"
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub==1.29.0",
+    "httptools==0.8.0",
+    "jinja2==3.1.6",
+    "orjson==3.12.0",
+    "starlette==1.6.0",
+    "tokenizers==0.23.1",
+    "uvicorn==0.41.0",
+    "uvloop==0.22.1",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "safetensors==0.8.0",
+    "torch==2.13.0",
+]
+
+[project.scripts]
+infer = "infer.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "modal==1.5.4",
+    "pytest>=9.1.1",
+    "ruff>=0.16.5",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = [
+    "gpu: requires a local CUDA GPU; enabled with INFER_RUN_GPU_TESTS=1",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu129", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+]
+
+[tool.ruff.format]
+exclude = ["src/infer/models/glm53_flash/ops/megafuse.py"]
