@@ -1,0 +1,4 @@
+MODEL_ID = "zai-org/GLM-5.3-Flash"
+MODEL_REVISION = "04c4e9e95c5da8862dced7e5056455116f83a7e0"
+
+__all__ = ("MODEL_ID", "MODEL_REVISION")

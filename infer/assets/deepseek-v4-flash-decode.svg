@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="400" viewBox="0 0 720 400" role="img" aria-labelledby="title desc">
+<title id="title">DeepSeek V4 Flash 0731 decode performance</title>
+<desc id="desc">Client-observed decode frontier for Infer, TokenSpeed, SGLang, and Infer with DSpark across a C4 to C128 concurrency sweep. Output tokens per second per user are plotted against output tokens per second per GPU.</desc>
+<style>
+  .background { fill: #ffffff; }
+  text { font-family: ui-sans-serif, system-ui, sans-serif; fill: #20262e; }
+  .muted { fill: #66717e; }
+  .grid { stroke: #dce2e8; stroke-width: 1; }
+  .frame { stroke: #7b8794; stroke-width: 1; fill: none; }
+  .tick { font-size: 11px; }
+  .point-label { font-size: 11px; font-weight: 500; }
+  .axis-title, .legend { font-size: 12px; }
+  .method-note { font-size: 12px; }
+  .title { font-size: 19px; font-weight: 600; }
+  .subtitle { font-size: 12px; }
+  @media (prefers-color-scheme: dark) {
+    .background { fill: #11151a; }
+    text { fill: #edf2f7; }
+    .muted { fill: #a6b0bb; }
+    .grid { stroke: #323a43; }
+    .frame { stroke: #687583; }
+  }
+</style>
+<rect class="background" width="720" height="400"/>
+<text class="title" x="90" y="28">DeepSeek V4 Flash 0731 decode performance</text>
+<text class="subtitle muted" x="90" y="52">4×B200 · DP4+EP4 · 8,192-token prefix hit · C4–C128 sweep</text>
+<text class="method-note muted" x="90" y="70">DP+DSpark not fully supported in TokenSpeed/SGLang at test time · comparator curves use target model only</text>
+
+<line x1="90" x2="110" y1="94" y2="94" stroke="#4299e1" stroke-width="2.5"/>
+<text class="legend" x="117" y="98">Infer</text>
+<line x1="180" x2="200" y1="94" y2="94" stroke="#ed8936" stroke-width="2.5" stroke-dasharray="7 5"/>
+<text class="legend" x="207" y="98">TokenSpeed</text>
+<line x1="310" x2="330" y1="94" y2="94" stroke="#48bb78" stroke-width="2.5" stroke-dasharray="7 5"/>
+<text class="legend" x="337" y="98">SGLang</text>
+<line x1="415" x2="435" y1="94" y2="94" stroke="#9f7aea" stroke-width="2.5"/>
+<text class="legend" x="442" y="98">Infer + DSpark</text>
+
+<line class="grid" x1="90.00" x2="90.00" y1="120" y2="342"/>
+<text class="tick muted" x="90.00" y="361" text-anchor="middle">0</text>
+<line class="grid" x1="264.29" x2="264.29" y1="120" y2="342"/>
+<text class="tick muted" x="264.29" y="361" text-anchor="middle">100</text>
+<line class="grid" x1="438.57" x2="438.57" y1="120" y2="342"/>
+<text class="tick muted" x="438.57" y="361" text-anchor="middle">200</text>
+<line class="grid" x1="612.86" x2="612.86" y1="120" y2="342"/>
+<text class="tick muted" x="612.86" y="361" text-anchor="middle">300</text>
+<line class="grid" x1="90" x2="700" y1="342.00" y2="342.00"/>
+<text class="tick muted" x="81" y="346.00" text-anchor="end">0</text>
+<line class="grid" x1="90" x2="700" y1="286.50" y2="286.50"/>
+<text class="tick muted" x="81" y="290.50" text-anchor="end">1k</text>
+<line class="grid" x1="90" x2="700" y1="231.00" y2="231.00"/>
+<text class="tick muted" x="81" y="235.00" text-anchor="end">2k</text>
+<line class="grid" x1="90" x2="700" y1="175.50" y2="175.50"/>
+<text class="tick muted" x="81" y="179.50" text-anchor="end">3k</text>
+<line class="grid" x1="90" x2="700" y1="120.00" y2="120.00"/>
+<text class="tick muted" x="81" y="124.00" text-anchor="end">4k</text>
+<rect class="frame" x="90" y="120" width="610" height="222"/>
+
+<path d="M278.15,336.08 L273.67,318.96 L239.98,267.75 L211.45,222.07" fill="none" stroke="#4299e1" stroke-width="2.5"/>
+<circle cx="278.15" cy="336.08" r="4.5" fill="#4299e1"/>
+<text class="point-label" x="254.00" y="338.00">C4</text>
+<circle cx="273.67" cy="318.96" r="4.5" fill="#4299e1"/>
+<text class="point-label" x="242.00" y="320.00">C16</text>
+<circle cx="239.98" cy="267.75" r="4.5" fill="#4299e1"/>
+<text class="point-label" x="208.00" y="270.00">C64</text>
+<circle cx="211.45" cy="222.07" r="4.5" fill="#4299e1"/>
+<text class="point-label" x="176.00" y="218.00">C128</text>
+
+<path d="M231.04,337.55 L218.60,326.00 L197.66,289.75 L175.61,260.92" fill="none" stroke="#ed8936" stroke-width="2.5" stroke-dasharray="7 5"/>
+<rect x="227.04" y="333.55" width="8" height="8" fill="#ed8936"/>
+<rect x="214.60" y="322.00" width="8" height="8" fill="#ed8936"/>
+<rect x="193.66" y="285.75" width="8" height="8" fill="#ed8936"/>
+<rect x="171.61" y="256.92" width="8" height="8" fill="#ed8936"/>
+
+<path d="M310.83,335.07 L284.71,317.91 L241.90,267.95 L214.57,223.34" fill="none" stroke="#48bb78" stroke-width="2.5" stroke-dasharray="7 5"/>
+<polygon points="310.83,330.07 305.83,339.07 315.83,339.07" fill="#48bb78"/>
+<polygon points="284.71,312.91 279.71,321.91 289.71,321.91" fill="#48bb78"/>
+<polygon points="241.90,262.95 236.90,271.95 246.90,271.95" fill="#48bb78"/>
+<polygon points="214.57,218.34 209.57,227.34 219.57,227.34" fill="#48bb78"/>
+
+<path d="M656.20,325.75 L524.24,298.64 L431.36,197.48 L320.11,135.16" fill="none" stroke="#9f7aea" stroke-width="2.5"/>
+<polygon points="656.20,320.75 651.20,325.75 656.20,330.75 661.20,325.75" fill="#9f7aea"/>
+<polygon points="524.24,293.64 519.24,298.64 524.24,303.64 529.24,298.64" fill="#9f7aea"/>
+<polygon points="431.36,192.48 426.36,197.48 431.36,202.48 436.36,197.48" fill="#9f7aea"/>
+<polygon points="320.11,130.16 315.11,135.16 320.11,140.16 325.11,135.16" fill="#9f7aea"/>
+
+<text class="axis-title muted" x="395.00" y="380" text-anchor="middle">output tok/s/user</text>
+<text class="axis-title muted" transform="translate(50 231.00) rotate(-90)" text-anchor="middle">output tok/s/GPU</text>
+</svg>

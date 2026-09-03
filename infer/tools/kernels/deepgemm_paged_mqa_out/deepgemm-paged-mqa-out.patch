@@ -1,0 +1,382 @@
+diff --git a/build_sgl_deep_gemm.sh b/build_sgl_deep_gemm.sh
+index 7ca3b5e..00e1f96 100755
+--- a/build_sgl_deep_gemm.sh
++++ b/build_sgl_deep_gemm.sh
+@@ -16,7 +16,7 @@
+
+ set -euo pipefail
+
+-PYTHON_EXE=$(which python3 || which python)
++PYTHON_EXE=${PYTHON_EXE:-$(which python3 || which python)}
+ ROOT_DIR=$(realpath "$(dirname "$0")")
+ BUILD_DIR="${ROOT_DIR}/build"
+ PKG_DIR="${BUILD_DIR}/deep_gemm"
+@@ -151,7 +151,7 @@ echo "--- Installing build frontend ---"
+
+ echo "--- Building wheel ---"
+ mkdir -p "$DIST_DIR"
+-"$PYTHON_EXE" -m build --wheel "$BUILD_DIR" --outdir "$DIST_DIR"
++"$PYTHON_EXE" -m build --wheel --no-isolation "$BUILD_DIR" --outdir "$DIST_DIR"
+
+ echo "--- Done ---"
+ ls -lh "$DIST_DIR"/sgl_deep_gemm-*.whl 2>/dev/null || ls -lh "$DIST_DIR"/sgl-deep-gemm-*.whl 2>/dev/null || ls -lh "$DIST_DIR"/sgl_deep_gemm*.whl
+diff --git a/csrc/apis/attention.hpp b/csrc/apis/attention.hpp
+index 0bf9ea7..41169b2 100644
+--- a/csrc/apis/attention.hpp
++++ b/csrc/apis/attention.hpp
+@@ -1,5 +1,7 @@
+ #pragma once
+
++#include <cstdint>
++
+ #include "../utils/compatibility.hpp"
+
+ #if DG_FP8_COMPATIBLE and DG_TENSORMAP_COMPATIBLE
+@@ -19,6 +21,10 @@
+ namespace deep_gemm::attention {
+
+ #if DG_FP8_COMPATIBLE and DG_TENSORMAP_COMPATIBLE
++static void check_cuda_device(const torch::Tensor& tensor, const torch::Device& device) {
++    DG_HOST_ASSERT(tensor.is_cuda() and tensor.device() == device);
++}
++
+ static void fp8_gemm_nt_skip_head_mid(const std::pair<torch::Tensor, torch::Tensor>& a,
+                                       const std::pair<torch::Tensor, torch::Tensor>& b,
+                                       const torch::Tensor& d,
+@@ -206,7 +212,10 @@ static torch::Tensor fp8_fp4_mqa_logits(const std::tuple<torch::Tensor, std::opt
+     return logits;
+ }
+
+-static torch::Tensor get_paged_mqa_logits_metadata(const torch::Tensor& context_lens, int block_kv, int num_sms, const std::optional<torch::Tensor>& indices) {
++static void get_paged_mqa_logits_metadata_out(const torch::Tensor& context_lens,
++                                              const torch::Tensor& schedule_metadata,
++                                              int block_kv, int num_sms,
++                                              const std::optional<torch::Tensor>& indices) {
+     // NOTES: Only 2D context lens is supported for now
+     DG_HOST_ASSERT(context_lens.dim() == 2);
+     const bool is_context_lens_2d = true;
+@@ -215,9 +224,13 @@ static torch::Tensor get_paged_mqa_logits_metadata(const torch::Tensor& context_
+     const bool is_varlen = indices.has_value();
+     DG_HOST_ASSERT(context_lens.scalar_type() == torch::kInt);
+     DG_HOST_ASSERT(context_lens.is_contiguous());
+-
+-    // Create metadata tensor
+-    auto schedule_metadata = torch::empty({num_sms + 1, 2}, context_lens.options());
++    DG_HOST_ASSERT(context_lens.is_cuda());
++    auto [_schedule_size, _schedule_width] = get_shape<2>(schedule_metadata);
++    DG_HOST_ASSERT(_schedule_size == num_sms + 1 and _schedule_width == 2);
++    DG_HOST_ASSERT(schedule_metadata.scalar_type() == torch::kInt);
++    DG_HOST_ASSERT(schedule_metadata.is_contiguous());
++    DG_HOST_ASSERT(reinterpret_cast<std::uintptr_t>(schedule_metadata.data_ptr()) % 8 == 0);
++    check_cuda_device(schedule_metadata, context_lens.device());
+
+     // Dispatch implementation
+     const auto arch_major = device_runtime->get_arch_major();
+@@ -227,6 +240,7 @@ static torch::Tensor get_paged_mqa_logits_metadata(const torch::Tensor& context_
+         DG_HOST_ASSERT(indices_tensor.dim() == 1 and indices_tensor.size(0) == batch_size);
+         DG_HOST_ASSERT(indices_tensor.is_contiguous());
+         DG_HOST_ASSERT(indices_tensor.scalar_type() == torch::kInt);
++        check_cuda_device(indices_tensor, context_lens.device());
+         sm100_paged_mqa_logits_metadata(context_lens, schedule_metadata, batch_size, batch_size * next_n, next_n, num_sms, is_context_lens_2d, true, indices_tensor.data_ptr<int>());
+     } else if (arch_major == 10) {
+         DG_HOST_ASSERT(block_kv == 64 or block_kv == 32);
+@@ -242,7 +256,11 @@ static torch::Tensor get_paged_mqa_logits_metadata(const torch::Tensor& context_
+     } else {
+         DG_HOST_UNREACHABLE("Unsupported architecture");
+     }
++}
+
++static torch::Tensor get_paged_mqa_logits_metadata(const torch::Tensor& context_lens, int block_kv, int num_sms, const std::optional<torch::Tensor>& indices) {
++    auto schedule_metadata = torch::empty({num_sms + 1, 2}, context_lens.options());
++    get_paged_mqa_logits_metadata_out(context_lens, schedule_metadata, block_kv, num_sms, indices);
+     return schedule_metadata;
+ }
+
+@@ -255,7 +273,8 @@ static torch::Tensor fp8_fp4_paged_mqa_logits(const std::tuple<torch::Tensor, st
+                                               const int& max_context_len,
+                                               const bool& clean_logits,
+                                               const at::ScalarType& logits_dtype,
+-                                              const std::optional<torch::Tensor>& indices) {
++                                              const std::optional<torch::Tensor>& indices,
++                                              const std::optional<torch::Tensor>& logits_out = std::nullopt) {
+     const auto [q_fp, q_sf] = q;
+     const bool is_fp4 = q_sf.has_value();
+
+@@ -395,8 +414,23 @@ static torch::Tensor fp8_fp4_paged_mqa_logits(const std::tuple<torch::Tensor, st
+     // Logits row stride must be 1024-byte aligned
+     const int stride_logits_alignment = 1024 / static_cast<int>(c10::elementSize(logits_dtype));
+     const auto aligned_max_context_len = align(align(max_context_len, split_kv), stride_logits_alignment);
+-    auto logits = torch::empty({batch_size * next_n, aligned_max_context_len}, q_fp.options().dtype(logits_dtype));
+-    logits = logits.slice(-1, 0, max_context_len);
++    torch::Tensor logits;
++    if (logits_out.has_value()) {
++        logits = logits_out.value();
++        auto [_logits_rows, _logits_width] = get_shape<2>(logits);
++        DG_HOST_ASSERT(_logits_rows == batch_size * next_n and _logits_width == max_context_len);
++        DG_HOST_ASSERT(logits.scalar_type() == logits_dtype);
++        DG_HOST_ASSERT(logits.stride(0) == aligned_max_context_len and logits.stride(1) == 1);
++        DG_HOST_ASSERT(logits.storage_offset() == 0);
++        const auto required_span = static_cast<size_t>(
++            logits.storage_offset() +
++            (batch_size * next_n - 1) * aligned_max_context_len + max_context_len
++        ) * c10::elementSize(logits_dtype);
++        DG_HOST_ASSERT(logits.storage().nbytes() >= required_span);
++    } else {
++        logits = torch::empty({batch_size * next_n, aligned_max_context_len}, q_fp.options().dtype(logits_dtype));
++        logits = logits.slice(-1, 0, max_context_len);
++    }
+
+     // Dispatch implementation
+     if (arch_major == 10) {
+@@ -453,6 +487,68 @@ static torch::Tensor fp8_paged_mqa_logits(const torch::Tensor& q,
+                                     context_lens, block_table, schedule_meta,
+                                     max_context_len, clean_logits, torch::kFloat, indices);
+ }
++
++static void fp8_paged_mqa_logits_out(const torch::Tensor& q,
++                                     const torch::Tensor& fused_kv_cache,
++                                     const torch::Tensor& weights,
++                                     const torch::Tensor& context_lens,
++                                     const torch::Tensor& block_table,
++                                     const torch::Tensor& schedule_meta,
++                                     const torch::Tensor& logits,
++                                     const int& max_context_len,
++                                     const bool& clean_logits,
++                                     const std::optional<torch::Tensor>& indices) {
++    DG_HOST_ASSERT(q.is_cuda() and not clean_logits);
++    const auto device = q.device();
++    check_cuda_device(fused_kv_cache, device);
++    check_cuda_device(weights, device);
++    check_cuda_device(context_lens, device);
++    check_cuda_device(block_table, device);
++    check_cuda_device(schedule_meta, device);
++    DG_HOST_ASSERT(reinterpret_cast<std::uintptr_t>(schedule_meta.data_ptr()) % 8 == 0);
++    check_cuda_device(logits, device);
++    if (indices.has_value())
++        check_cuda_device(indices.value(), device);
++    fp8_fp4_paged_mqa_logits(std::make_tuple(q, std::nullopt), fused_kv_cache, weights,
++                             context_lens, block_table, schedule_meta,
++                             max_context_len, clean_logits, torch::kFloat, indices, logits);
++}
++
++static void fp8_fp4_paged_mqa_logits_out(const torch::Tensor& q,
++                                         const torch::Tensor& q_sf,
++                                         const torch::Tensor& fused_kv_cache,
++                                         const torch::Tensor& weights,
++                                         const torch::Tensor& context_lens,
++                                         const torch::Tensor& block_table,
++                                         const torch::Tensor& schedule_meta,
++                                         const torch::Tensor& logits,
++                                         const int& max_context_len,
++                                         const bool& clean_logits,
++                                         const std::optional<torch::Tensor>& indices) {
++    DG_HOST_ASSERT(q.is_cuda() and not clean_logits);
++    const auto device = q.device();
++    check_cuda_device(q_sf, device);
++    check_cuda_device(fused_kv_cache, device);
++    check_cuda_device(weights, device);
++    check_cuda_device(context_lens, device);
++    check_cuda_device(block_table, device);
++    check_cuda_device(schedule_meta, device);
++    DG_HOST_ASSERT(reinterpret_cast<std::uintptr_t>(schedule_meta.data_ptr()) % 8 == 0);
++    check_cuda_device(logits, device);
++    if (indices.has_value())
++        check_cuda_device(indices.value(), device);
++    auto [batch_size, next_n, num_heads, packed_head_dim] = get_shape<4>(q);
++    auto [sf_batch_size, sf_next_n, sf_num_heads] = get_shape<3>(q_sf);
++    auto [num_kv_blocks, block_kv, num_kv_heads, fp4_with_sf_bytes] = get_shape<4>(fused_kv_cache);
++    DG_HOST_ASSERT(batch_size > 0 and next_n == 1 and num_heads == 64 and packed_head_dim == 64);
++    DG_HOST_ASSERT(sf_batch_size == batch_size and sf_next_n == 1 and sf_num_heads == 64);
++    DG_HOST_ASSERT(num_kv_blocks > 0 and block_kv == 32 and num_kv_heads == 1 and fp4_with_sf_bytes == 68);
++    DG_HOST_ASSERT(fused_kv_cache.stride(0) == 2176 and fused_kv_cache.storage_offset() == 0);
++    DG_HOST_ASSERT(reinterpret_cast<std::uintptr_t>(fused_kv_cache.data_ptr()) % 16 == 0);
++    fp8_fp4_paged_mqa_logits(std::make_tuple(q, std::optional(q_sf)), fused_kv_cache, weights,
++                             context_lens, block_table, schedule_meta,
++                             max_context_len, clean_logits, torch::kFloat, indices, logits);
++}
+ #endif
+
+ #if 0
+diff --git a/csrc/tvm_ffi_api.cpp b/csrc/tvm_ffi_api.cpp
+index bee2310..3bcb8b5 100644
+--- a/csrc/tvm_ffi_api.cpp
++++ b/csrc/tvm_ffi_api.cpp
+@@ -582,6 +582,18 @@ Tensor dg_get_paged_mqa_logits_metadata(TensorView context_lens, int64_t block_k
+     return Tensor::FromDLPack(at::toDLPack(result));
+ }
+
++void dg_get_paged_mqa_logits_metadata_out(TensorView context_lens,
++                                          TensorView schedule_meta,
++                                          int64_t block_kv, int64_t num_sms,
++                                          Optional<TensorView> indices) {
++    auto indices_val = indices.has_value()?
++        std::optional<torch::Tensor>(convert_to_torch_tensor(indices.value()))
++        : std::nullopt;
++    attention::get_paged_mqa_logits_metadata_out(
++        convert_to_torch_tensor(context_lens), convert_to_torch_tensor(schedule_meta),
++        static_cast<int>(block_kv), static_cast<int>(num_sms), indices_val);
++}
++
+ Tensor dg_fp8_paged_mqa_logits(TensorView q, TensorView fused_kv_cache,
+                               TensorView weights, TensorView context_lens,
+                               TensorView block_table, TensorView schedule_meta,
+@@ -596,6 +608,35 @@ Tensor dg_fp8_paged_mqa_logits(TensorView q, TensorView fused_kv_cache,
+     return Tensor::FromDLPack(at::toDLPack(result));
+ }
+
++void dg_fp8_paged_mqa_logits_out(TensorView q, TensorView fused_kv_cache,
++                                 TensorView weights, TensorView context_lens,
++                                 TensorView block_table, TensorView schedule_meta,
++                                 TensorView logits, int64_t max_context_len,
++                                 bool clean_logits, Optional<TensorView> indices) {
++    auto indices_val = indices.has_value()? std::optional(convert_to_torch_tensor(indices.value())) : std::nullopt;
++    attention::fp8_paged_mqa_logits_out(
++        convert_to_torch_tensor(q), convert_to_torch_tensor(fused_kv_cache),
++        convert_to_torch_tensor(weights), convert_to_torch_tensor(context_lens),
++        convert_to_torch_tensor(block_table), convert_to_torch_tensor(schedule_meta),
++        convert_to_torch_tensor(logits), static_cast<int>(max_context_len),
++        clean_logits, indices_val);
++}
++
++void dg_fp8_fp4_paged_mqa_logits_out(TensorView q, TensorView q_sf,
++                                     TensorView fused_kv_cache, TensorView weights,
++                                     TensorView context_lens, TensorView block_table,
++                                     TensorView schedule_meta, TensorView logits,
++                                     int64_t max_context_len, bool clean_logits,
++                                     Optional<TensorView> indices) {
++    auto indices_val = indices.has_value()? std::optional(convert_to_torch_tensor(indices.value())) : std::nullopt;
++    attention::fp8_fp4_paged_mqa_logits_out(
++        convert_to_torch_tensor(q), convert_to_torch_tensor(q_sf),
++        convert_to_torch_tensor(fused_kv_cache), convert_to_torch_tensor(weights),
++        convert_to_torch_tensor(context_lens), convert_to_torch_tensor(block_table),
++        convert_to_torch_tensor(schedule_meta), convert_to_torch_tensor(logits),
++        static_cast<int>(max_context_len), clean_logits, indices_val);
++}
++
+ Tensor dg_fp8_fp4_mqa_logits(TensorView q, Optional<TensorView> q_sf, TensorView kv_data, TensorView kv_sf,
+                             TensorView weights, TensorView cu_seq_len_k_start,
+                             TensorView cu_seq_len_k_end, bool clean_logits, int64_t max_seqlen_k,
+@@ -630,7 +671,10 @@ Tensor dg_fp8_fp4_paged_mqa_logits(TensorView q, Optional<TensorView> q_sf, Tens
+ TVM_FFI_DLL_EXPORT_TYPED_FUNC(fp8_gemm_nt_skip_head_mid, dg_fp8_gemm_nt_skip_head_mid);
+ TVM_FFI_DLL_EXPORT_TYPED_FUNC(fp8_mqa_logits, dg_fp8_mqa_logits);
+ TVM_FFI_DLL_EXPORT_TYPED_FUNC(get_paged_mqa_logits_metadata, dg_get_paged_mqa_logits_metadata);
++TVM_FFI_DLL_EXPORT_TYPED_FUNC(get_paged_mqa_logits_metadata_out, dg_get_paged_mqa_logits_metadata_out);
+ TVM_FFI_DLL_EXPORT_TYPED_FUNC(fp8_paged_mqa_logits, dg_fp8_paged_mqa_logits);
++TVM_FFI_DLL_EXPORT_TYPED_FUNC(fp8_paged_mqa_logits_out, dg_fp8_paged_mqa_logits_out);
+ TVM_FFI_DLL_EXPORT_TYPED_FUNC(fp8_fp4_mqa_logits, dg_fp8_fp4_mqa_logits);
+ TVM_FFI_DLL_EXPORT_TYPED_FUNC(fp8_fp4_paged_mqa_logits, dg_fp8_fp4_paged_mqa_logits);
++TVM_FFI_DLL_EXPORT_TYPED_FUNC(fp8_fp4_paged_mqa_logits_out, dg_fp8_fp4_paged_mqa_logits_out);
+
+diff --git a/sgl_deep_gemm/__init__.py b/sgl_deep_gemm/__init__.py
+index c3e7393..bd6744d 100644
+--- a/sgl_deep_gemm/__init__.py
++++ b/sgl_deep_gemm/__init__.py
+@@ -206,6 +206,38 @@ try:
+     def fp8_paged_mqa_logits(q, kv_cache, weights, context_lens, block_table, schedule_meta, max_context_len, clean_logits=False, indices=None):
+         return _C.fp8_paged_mqa_logits(q, kv_cache, weights, context_lens, block_table, schedule_meta, max_context_len, clean_logits, indices)
+
++    def fp8_paged_mqa_logits_out(q, kv_cache, weights, context_lens, block_table, schedule_meta, logits, max_context_len, clean_logits=False, indices=None) -> None:
++        if max_context_len <= 0:
++            raise ValueError('max_context_len must be positive')
++        tensors = (q, kv_cache, weights, context_lens, block_table, schedule_meta, logits)
++        if indices is not None:
++            tensors += (indices,)
++        if not q.is_cuda or any(not tensor.is_cuda or tensor.device != q.device for tensor in tensors):
++            raise ValueError('paged MQA tensors must share one CUDA device')
++        if torch.cuda.get_device_capability(q.device) != (10, 0):
++            raise ValueError('caller-owned paged MQA output is qualified only for SM100')
++        if schedule_meta.storage_offset() != 0 or schedule_meta.data_ptr() % 8:
++            raise ValueError('schedule_meta must begin at an 8-byte-aligned allocation')
++        if q.ndim != 4 or context_lens.shape != q.shape[:2]:
++            raise ValueError('q must be [B, next_n, H, D] and context_lens [B, next_n]')
++        rows = q.shape[0] * q.shape[1]
++        if rows <= 0:
++            raise ValueError('paged MQA batch must not be empty')
++        aligned_width = (max_context_len + 255) // 256 * 256
++        if logits.dtype != torch.float32 or logits.shape != (rows, max_context_len):
++            raise ValueError('logits must be float32 [B * next_n, max_context_len]')
++        if logits.stride() != (aligned_width, 1):
++            raise ValueError('logits must be a logical view over 256-element-aligned rows')
++        if logits.storage_offset() != 0:
++            raise ValueError('logits must begin at its backing allocation')
++        offset_bytes = logits.storage_offset() * logits.element_size()
++        required_bytes = rows * aligned_width * logits.element_size()
++        if logits.untyped_storage().nbytes() - offset_bytes < required_bytes:
++            raise ValueError('logits backing does not cover every aligned row')
++        if clean_logits:
++            raise ValueError('2D context_lens do not support clean_logits')
++        _C.fp8_paged_mqa_logits_out(q, kv_cache, weights, context_lens, block_table, schedule_meta, logits, max_context_len, clean_logits, indices)
++
+     def fp8_mqa_logits(q, kv, weights, ks, ke, clean_logits=False, max_seqlen_k=0):
+         (kv_data, kv_sf) = _parse_tensor_or_tuple(kv)
+         return _C.fp8_mqa_logits(q, kv_data, kv_sf, weights, ks, ke, clean_logits, max_seqlen_k)
+@@ -215,6 +247,45 @@ try:
+         (q, q_sf) = _parse_tensor_or_tuple(q)
+         return _C.fp8_fp4_paged_mqa_logits(q, q_sf, kv_cache, weights, context_lens, block_table, schedule_meta, max_context_len, clean_logits, logits_dtype_str, indices)
+
++    def fp8_fp4_paged_mqa_logits_out(q, kv_cache, weights, context_lens, block_table, schedule_meta, logits, max_context_len, clean_logits=False, indices=None) -> None:
++        if type(q) not in (tuple, list) or len(q) != 2 or q[1] is None:
++            raise ValueError('DeepSeek C4 q must be packed E2M1 values plus packed UE8M0 scales')
++        q, q_sf = q
++        if max_context_len <= 0:
++            raise ValueError('max_context_len must be positive')
++        tensors = (q, q_sf, kv_cache, weights, context_lens, block_table, schedule_meta, logits)
++        if indices is not None:
++            tensors += (indices,)
++        if not q.is_cuda or any(not tensor.is_cuda or tensor.device != q.device for tensor in tensors):
++            raise ValueError('paged MXFP4 MQA tensors must share one CUDA device')
++        if torch.cuda.get_device_capability(q.device) != (10, 0):
++            raise ValueError('caller-owned paged MXFP4 output is qualified only for SM100')
++        if q.dtype != torch.int8 or q.ndim != 4 or q.shape[1:] != (1, 64, 64) or not q.is_contiguous():
++            raise ValueError('q values must be contiguous packed E2M1 int8 [B, 1, 64, 64]')
++        if q.shape[0] <= 0:
++            raise ValueError('paged MXFP4 MQA batch must not be empty')
++        if q_sf.dtype != torch.int32 or q_sf.shape != q.shape[:3] or not q_sf.is_contiguous():
++            raise ValueError('q scales must be contiguous packed UE8M0 int32 [B, 1, 64]')
++        if kv_cache.dtype != torch.uint8 or kv_cache.ndim != 4 or kv_cache.shape[1:] != (32, 1, 68):
++            raise ValueError('kv_cache must be page-32 fused MXFP4 uint8 [P, 32, 1, 68]')
++        if kv_cache.shape[0] <= 0 or kv_cache.stride(0) != 2176 or kv_cache.stride()[1:] != (68, 68, 1):
++            raise ValueError('kv_cache must use exact planar 2176-byte page strides')
++        if kv_cache.storage_offset() != 0 or kv_cache.data_ptr() % 16:
++            raise ValueError('kv_cache must begin at a 16-byte-aligned allocation')
++        if schedule_meta.storage_offset() != 0 or schedule_meta.data_ptr() % 8:
++            raise ValueError('schedule_meta must begin at an 8-byte-aligned allocation')
++        rows = q.shape[0]
++        aligned_width = (max_context_len + 255) // 256 * 256
++        if logits.dtype != torch.float32 or logits.shape != (rows, max_context_len):
++            raise ValueError('logits must be float32 [B, max_context_len]')
++        if logits.stride() != (aligned_width, 1) or logits.storage_offset() != 0:
++            raise ValueError('logits must begin at a 256-element-aligned backing allocation')
++        if logits.untyped_storage().nbytes() < rows * aligned_width * logits.element_size():
++            raise ValueError('logits backing does not cover every aligned row')
++        if clean_logits:
++            raise ValueError('2D context_lens do not support clean_logits')
++        _C.fp8_fp4_paged_mqa_logits_out(q, q_sf, kv_cache, weights, context_lens, block_table, schedule_meta, logits, max_context_len, clean_logits, indices)
++
+     def fp8_fp4_mqa_logits(q, kv, weights, cu_seq_len_k_start, cu_seq_len_k_end, clean_logits=False, max_seqlen_k=0, logits_dtype=torch.float):
+         (q, q_sf), (kv_data, kv_sf) = _parse_tensor_or_tuple(q), _parse_tensor_or_tuple(kv)
+         logits_dtype_str = str(logits_dtype).split('.')[-1]
+@@ -223,6 +294,22 @@ try:
+     def get_paged_mqa_logits_metadata(context_lens, block_kv, num_sms, indices=None):
+         return _C.get_paged_mqa_logits_metadata(context_lens, block_kv, num_sms, indices)
+
++    def get_paged_mqa_logits_metadata_out(context_lens, schedule_meta, block_kv, num_sms, indices=None) -> None:
++        if num_sms <= 0:
++            raise ValueError('num_sms must be positive')
++        tensors = (context_lens, schedule_meta) if indices is None else (context_lens, schedule_meta, indices)
++        if not context_lens.is_cuda or any(not tensor.is_cuda or tensor.device != context_lens.device for tensor in tensors):
++            raise ValueError('paged MQA metadata tensors must share one CUDA device')
++        if context_lens.ndim != 2 or context_lens.dtype != torch.int32 or not context_lens.is_contiguous():
++            raise ValueError('context_lens must be contiguous CUDA int32 [B, next_n]')
++        if context_lens.shape[0] <= 0 or context_lens.shape[1] <= 0:
++            raise ValueError('paged MQA batch must not be empty')
++        if schedule_meta.storage_offset() != 0 or schedule_meta.data_ptr() % 8:
++            raise ValueError('schedule_meta must begin at an 8-byte-aligned allocation')
++        if schedule_meta.shape != (num_sms + 1, 2) or schedule_meta.dtype != torch.int32 or not schedule_meta.is_contiguous():
++            raise ValueError('schedule_meta must be contiguous CUDA int32 [num_sms + 1, 2]')
++        _C.get_paged_mqa_logits_metadata_out(context_lens, schedule_meta, block_kv, num_sms, indices)
++
+     def tf32_hc_prenorm_gemm(a, b, d, sqr_sum, num_splits=None):
+         _C.tf32_hc_prenorm_gemm(a, b, d, sqr_sum, num_splits)
+
+     def transform_sf_into_required_layout(sf, mn, k, recipe, num_groups=None, is_sfa=None, disable_ue8m0_cast=False):

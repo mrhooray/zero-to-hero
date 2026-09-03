@@ -1,0 +1,46 @@
+DeepSeek V4 compressor provenance
+=================================
+
+This notice applies only to the derivative Triton kernels in
+src/infer/models/deepseek_v4_flash/ops/__init__.py.
+
+TokenSpeed origin:
+https://github.com/lightseekorg/tokenspeed
+Commit: f17b03efc1728875c586d848f49da5905032e87c
+Path: tokenspeed-kernel/python/tokenspeed_kernel/ops/attention/triton/dsv4.py
+Git blob: 70f70a054227978576c5f316a1d490cecf36fcd9
+Source SHA-256: 9891f9e23e3a2ac39be8af453e28b015f1b4c3a783913a07bbbb92cff8c42930
+
+The derivative retains only the qualified compressor state-save, main-cache,
+and C4 Indexer-cache operations, fixes their dimensions to the DeepSeek V4
+deployment, and preserves the official model's BF16 boundaries before RMSNorm
+and RoPE. TokenSpeed identifies portions of the source as derived from vLLM.
+
+SPDX-License-Identifier: MIT AND Apache-2.0
+SPDX-FileCopyrightText: Copyright (c) 2026 LightSeek Foundation
+SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+MIT License
+
+Copyright (c) 2026 LightSeek Foundation <contact@lightseek.org>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+The repository also includes the complete Apache License 2.0 terms in
+src/infer/models/glm53_flash/ops/segmented_conv.LICENSE.txt.

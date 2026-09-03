@@ -1,0 +1,31 @@
+MIT License
+
+Copyright (c) 2026 LightSeek Foundation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Reduced from TokenSpeed's DeepSeek V4 writer at commit
+f17b03efc1728875c586d848f49da5905032e87c.
+
+Source: https://github.com/lightseekorg/tokenspeed
+Path: tokenspeed-kernel/python/tokenspeed_kernel/thirdparty/cuda/csrc/dsv4_attention.cu
+Blob: c4682c675f490e6af59edb9b0ec5053fc799a4f4
+Source SHA-256: 9058244c912a11b4838ea901a79b14ce9d540fc93fc79527a5dbde8de3e32348
+Relevant lines: 1-53, 125-426, 526-611
+Combined slice SHA-256: 75d40f3922a4ace1af515e1e866dc94aed664a4d338c1d3dbef261ba92b1c8b4
