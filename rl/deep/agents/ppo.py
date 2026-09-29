@@ -170,21 +170,33 @@ class PPOAgent:
         nn.utils.clip_grad_norm_(self.parameters, self.ppo_config.gradient_clip)
         self.optimizer.step()
 
+    @torch.no_grad()
     def _advantages(self, values: torch.Tensor) -> torch.Tensor:
         advantages = []
         advantage = 0.0
         next_value = 0.0
+        final_transition = self.rollout[-1].transition
+        if not final_transition.terminated:
+            next_value = self.value(
+                torch.as_tensor(final_transition.next_observation, dtype=torch.float32)
+            ).item()
         for index in reversed(range(len(self.rollout))):
             step = self.rollout[index]
-            mask = 1.0 - float(step.transition.terminated or step.transition.truncated)
+            bootstrap_mask = 1.0 - float(step.transition.terminated)
+            continue_mask = 1.0 - float(
+                step.transition.terminated or step.transition.truncated
+            )
             delta = (
                 step.transition.reward
-                + self.config.gamma * next_value * mask
+                + self.config.gamma * next_value * bootstrap_mask
                 - values[index].item()
             )
             advantage = (
                 delta
-                + self.config.gamma * self.ppo_config.gae_lambda * mask * advantage
+                + self.config.gamma
+                * self.ppo_config.gae_lambda
+                * continue_mask
+                * advantage
             )
             advantages.append(advantage)
             next_value = values[index].item()

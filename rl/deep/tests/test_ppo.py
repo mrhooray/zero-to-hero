@@ -44,7 +44,37 @@ def test_ppo_advantages_use_next_step_value() -> None:
     assert advantages.tolist() == pytest.approx([2.1, 2.0])
 
 
-def _rollout_step(reward: float, terminated: bool) -> RolloutStep:
+@pytest.mark.parametrize(
+    ("terminated", "truncated", "expected_delta"),
+    [(False, True, 0.9), (True, False, -9.0), (True, True, -9.0)],
+)
+def test_ppo_advantages_bootstrap_only_at_truncation(
+    terminated: bool, truncated: bool, expected_delta: float
+) -> None:
+    config = TrainingConfig(gamma=0.99, hidden_size=16)
+    agent = PPOAgent(gym.make("CartPole-v1"), config, PPOConfig(gae_lambda=0.95))
+    agent.value = torch.nn.Linear(4, 1, bias=False)
+    with torch.no_grad():
+        agent.value.weight.fill_(2.5)
+    agent.rollout = [
+        _rollout_step(reward=1.0, terminated=False),
+        _rollout_step(reward=1.0, terminated=terminated, truncated=truncated),
+    ]
+    agent.rollout[-1].transition.next_observation[:] = 1.0
+
+    advantages = agent._advantages(torch.as_tensor([10.0, 10.0]))
+
+    assert advantages.tolist() == pytest.approx(
+        [
+            0.9 + config.gamma * agent.ppo_config.gae_lambda * expected_delta,
+            expected_delta,
+        ]
+    )
+
+
+def _rollout_step(
+    reward: float, terminated: bool, truncated: bool = False
+) -> RolloutStep:
     return RolloutStep(
         transition=Transition(
             observation=np.zeros(4, dtype=np.float32),
@@ -52,7 +82,7 @@ def _rollout_step(reward: float, terminated: bool) -> RolloutStep:
             reward=reward,
             next_observation=np.zeros(4, dtype=np.float32),
             terminated=terminated,
-            truncated=False,
+            truncated=truncated,
         ),
         log_prob=torch.as_tensor(0.0),
         value=torch.as_tensor(0.0),
